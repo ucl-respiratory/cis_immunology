@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+data/
+private/
+results/
+glimma-plots/
+CHAMP_*
