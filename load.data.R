@@ -1,4 +1,19 @@
 # Load necessary datasets.
+#
+# This script does assume significant pre-processing has already been done. It is shared for information and is not straightforward to run.
+# The user must perform the following:
+#   Download and process raw gene expression, methylation and whole genome data as described in this manuscript: https://doi.org/10.1038/s41591-018-0323-0
+#   Save gene expression data in data/gdata.RData
+#   Save methylation data in data/mdata.RData
+#   Download matched stromal data from GEO as described in the accompanying manuscript
+#   Call mutations from WGS data as described previously (https://doi.org/10.1038/s41591-018-0323-0), save results as a data frame muts.all in data/wgsdata.Rdata
+#   Run optitype on germline blood samples to establish patient HLA types: https://github.com/FRED-2/OptiType
+#   Run LOHHLA on WGS samples - see https://bitbucket.org/mcgranahanlab/lohhla/src/master/
+#   Run netMHC to call neoantigens from WGS samples following methods described here: https://doi.org/10.1038/s41586-019-1032-7
+#
+# Note that the above steps are not straightforward and do require significant bioinformatic expertise. 
+# However, all methods above are published and well-established.
+#
 # Data is stored in data frames as follows:
 #   pheno - details of each sample, and which analyses were performed. Includes some calculated metrics as below.
 #   gdata - gene expression dataset with rows as genes, columns as sample names (n=51). Combines illumina and affymetrix data using ComBat.
@@ -77,8 +92,7 @@ mpheno$sampleID <- pheno$SampleID[match(make.names(mpheno$Sample_Name), pheno$Sa
 # Here we load tissue and stroma CEL files and normalise together 
 # Thus values will be different to gdata.v, even though these are the same samples
 # Hence we store as gdata.pair.t and gdata.pair.s for tissue and stroma data respectively
-# TODO: do this from CEL files
-load("../cis_immunology/resources/gdata.paired.RData")
+load("data/gdata.paired.RData")
 gpheno.pair <- pheno[which(pheno$Stroma.GXN),]
 gdata.pair.t <- gdata.paired[,paste0('T_', gpheno.pair$Sample.Number..GXN.)]
 colnames(gdata.pair.t) <- gpheno.pair$SampleID
@@ -341,56 +355,8 @@ if(file.exists(ccf.cache.file)){
   rm(m.tmp)
 }
 
-
 muts.all$ccf <- ccf$ccf.est
 muts.all$is.clonal <- ccf$is.clonal
-
-
-
-
-# # Append copy number data to muts.all
-# cnas.amps2 <- lapply(names(cnas.amps), function(x){
-#   if(dim(cnas.amps[[x]])[1] == 0){return(NA)}
-#   cnas.amps[[x]]$patient <- x
-#   cnas.amps[[x]]$GENEID <- NULL
-#   cnas.amps[[x]]$SYMBOL <- as.character(cnas.amps[[x]]$SYMBOL)
-#   return(cnas.amps[[x]])
-# })
-# cnas.amps2 <- cnas.amps2[which(!is.na(cnas.amps2))]
-# cnas.amps2 <- data.table::rbindlist(cnas.amps2)
-# cnas.amps2$class="AMP"
-# cnas.amps2$type="CN amplification"
-# 
-# cnas.dels2 <- lapply(names(cnas.dels), function(x){
-#   if(dim(cnas.dels[[x]])[1] == 0){return(NA)}
-#   cnas.dels[[x]] <- data.frame(cnas.dels[[x]])
-#   cnas.dels[[x]]$patient <- x
-#   cnas.dels[[x]]$GENEID <- NULL
-#   cnas.dels[[x]]$SYMBOL <- as.character(cnas.dels[[x]]$SYMBOL)
-#   return(cnas.dels[[x]])
-# })
-# cnas.dels2 <- cnas.dels2[which(!is.na(cnas.dels2))]
-# cnas.dels2 <- data.table::rbindlist(cnas.dels2)
-# cnas.dels2$class="DEL"
-# cnas.dels2$type="CN deletion"
-# 
-# cnas.all <- rbind(cnas.amps2, cnas.dels2)
-# df <- data.frame(
-#   patient=cnas.all$patient,
-#   gene=as.character(cnas.all$SYMBOL),
-#   class=cnas.all$class,
-#   type=cnas.all$type,
-#   ref=NA,
-#   alt=NA,
-#   chr=gsub("chr", "", cnas.all$seqnames),
-#   start=cnas.all$start,
-#   end=cnas.all$end,
-#   filters="PASS",
-#   asmd=140,
-#   clpm=0,
-#   vaf=NA,ref.reads=NA,alt.reads=NA,tumour.reads=NA,depth=NA,exonic=NA,protein.change=NA,cds.mut=NA,filters.passed=T,mid=NA,translocation.partner=NA,chr2=NA,start2=NA,end2=NA
-# )
-# muts.all <- rbind(muts.all, df)
 
 # Add sampleID to muts.all
 muts.all$sampleID <- pheno$SampleID[match(muts.all$patient, pheno$Sample.Number..WGS.)]
@@ -477,22 +443,28 @@ if(length(sel.rm) > 0){
 
 ####################################################################################
 # IHC data
+# Load raw IHC data
 ####################################################################################
 load('data/ihc.RData')
 ihc$sampleID <- pheno$SampleID[match(ihc$Samples, pheno$Sample.Number..IHC.)]
 
-
 ####################################################################################
 # TCGA data
+# Data for lung squamous cell carcinoma (LUSC) was downloaded from TCGA using GenomicDataCommons software.
+# Samples with overlapping methylation and gene expression data are saved to data/tcga.overlap.RData
+# Methylation data is imputed using champ.impute from the ChAMP package to correct for missing probe values
+# CNAs are also called from TCGA data using ASCAT, and summarised in a table (tcga.cn.table)
+# LOHHLA calls from TCGA are also included.
 ####################################################################################
-load("~/Scratch/TCGA-mining/data/tcga.overlap.RData")
+load("data/tcga.overlap.RData")
+# Rename some variables:
 gm.tcga.mdata.genes <- gm.tcga.mdata
 gm.tcga.mdata <- gm.tcga.mdata.imp
 
-load('~/Scratch/TCGA-mining/data/cnv/lusc.cnas.by.gene.RData')
+load('data/lusc.cnas.by.gene.RData')
 
 # TCGA LOHHLA calls (From Rachel)
-load('data/2017_Cell_McGranahan-TCGA-HLA-LOH-calls.RData')
+load('data/tcga.lohhla.calls.RData')
 tcga.lohhla <- tmp
 gm.tcga.pheno$PatientBarcode <- substr(as.character(gm.tcga.pheno$submitter_id2), 1, 12)
 gm.tcga.pheno <- merge(gm.tcga.pheno, tmp, by.x = 'PatientBarcode', by.y='row.names', all.x=T)
@@ -515,7 +487,9 @@ sig <- Signatures$lung_NSCLC_squamous_cell_carcinoma_v2_Signature.txt
 Prep.CancerType(Beta = mdata, Probes = sig$NAME, fname = "methCS_mdata")
 Prep.CancerType(Beta = gm.tcga.mdata, Probes = sig$NAME, fname = "methCS_mdata_tcga")
 write.table(sig, file = "methCS_Signature_LUSC", sep = "\t", row.names = FALSE, quote = FALSE)
-source("~/Dropbox/CIS_Immunology/MethylCIBERSORT_Release/CIBERSORT.R")
+# CIBERSORT code must be downloaded into the resources folder from here:
+# https://cibersort.stanford.edu
+source("resources/CIBERSORT.R")
 set.seed(42)
 methCS <- CIBERSORT('methCS_Signature_LUSC', 'methCS_mdata.txt', perm=100)
 methCS.tcga <-CIBERSORT('methCS_Signature_LUSC', 'methCS_mdata_tcga.txt', perm=100) 
