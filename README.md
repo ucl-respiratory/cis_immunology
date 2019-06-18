@@ -6,12 +6,13 @@ This repository provides code used to generate figures and results quoted in "Im
 
 To run the code in this repository you will need to download raw data. This is shared in the following repositories:
 
-* CIS gene expression data: 
-* Matched stromal expression data: 
-* Methylation data:
-* Whole genome sequencing data:
+* CIS gene expression data: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE108124
+* Matched stromal expression data: TBC
+* Methylation data: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE108124
+* Whole genome sequencing data: https://www.ebi.ac.uk/ega/datasets/EGAD00001003883
+* IHC and imaging data: TBC
 
-The file load.data.R in this repository parses these raw data into the format required by the main analysis function, plot.figures.R. However, due to limitations in sharing potentially identifiable genomic data, we are not able to share full pipelines to do this. Replication of this analysis does therefore require bioinformatic expertise to pre-process the above raw data.
+The file load.data.R in this repository parses these raw data into the format required by the main analysis function, plot.figures.R. However, due to computational requirements and limitations in sharing potentially identifiable genomic data, we are not able to share full pipelines to do this. Full replication of this analysis does therefore require bioinformatic expertise to pre-process the above raw data.
 
 Pre-processing steps are summarised as follows:
 
@@ -27,3 +28,4 @@ The file `plot.figures.R` generates all figures and supplementary tables present
 
 Figures were produced using R version 3.5.0 and Bioconductor version 3.7. Required packages are listed in `plot.figures.R`. Full package version information is cached on running this file; the full package version list used to generate publication figures is included as `package.versions.csv`.
 
+Excluded from this file is CIBERSORT.R and the MethylCIBERSORT R package, which is not available on Bioconductor. Code for CIBERSORT and MethylCIBERSORT can be downloaded from https://cibersort.stanford.edu and https://figshare.com/articles/MethylCIBERSORT_-_an_R_package_for_methylation_based_deconvolution_of_tumour_data_/6453650. The published analysis uses CIBERSORT version 1.0.4 and MethylCIBERSORT version 0.2.0.
