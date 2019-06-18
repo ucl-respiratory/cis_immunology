@@ -1,37 +1,37 @@
 # Create all figures and supplementary data for this paper.
 
-version <- 0.7
-
-# Required libraries:
-library(tidyverse)
-library(ggplot2)
-library(ggsignif)
-library(ggrepel)
-library(ggpubr)
-library(cowplot)
-theme_set(theme_cowplot(font_size=10))
-library(magick)
-library(WriteXLS)
-library(foreach)
-library(ChAMP)
-library(pathview)
+version <- 0.8
 
 # Output directory
 figdir <- paste0("~/Dropbox/CIS_Immunology/cis_immunology2/results/v", version, "/figures/")
 supdir <- paste0("~/Dropbox/CIS_Immunology/cis_immunology2/results/v", version, "/supdata/")
 dir.create(figdir, showWarnings = F, recursive = T)
 dir.create(supdir, showWarnings = F, recursive = T)
-# dir.create('results/figures', showWarnings = F, recursive = T)
-# dir.create('results/supdata', showWarnings = F, recursive = T)
 
 # Create a text file for other results quoted in the text:
 opfile <- paste0(supdir, "results.in.text.txt")
 write(c("# Statistical results quoted in the main text:", ""), file = opfile)
 
+# Required libraries:
+libs <- c("tidyverse", "ggplot2", "ggsignif", "ggrepel", "ggpubr", "cowplot", "magick", "WriteXLS", "foreach", "ChAMP", "pathview", "pheatmap", "grid", "ggplotify", "biomaRt",
+          "httr", "jsonlite", "xml2", "sva", "gdata", "BSgenome.Hsapiens.UCSC.hg19", "Homo.sapiens", "limma", "lme4", "car", "tibble", "dndscv")
+
+for(lib in libs) {
+  library(lib, character.only = T)
+}
+
+# Export the current versions of required libraries to the results folder
+vfile <- paste0(supdir, "package.versions.csv")
+version.data <- installed.packages()[libs,]
+write.csv(version.data, file = vfile)
+
+
 # Figure width - assume double column = 183mm (see https://www.nature.com/nature/for-authors/formatting-guide)
 # -> 7.204" (needed for save_plot base_width method)
 fig.width <- 7.204
 fig.maxheight <- 9.72
+
+theme_set(theme_cowplot(font_size=10))
 
 ###############################################################################################
 # Load data
@@ -273,7 +273,6 @@ save_plot(paste0(figdir, "fig1.pdf"), fig, nrow = 2, ncol=1, base_width = fig.wi
 ##############################################################################
 message("Plotting Figure 2")
 # Clustering on affy gxn immune genes:
-library(pheatmap)
 annot.gxn <- data.frame(outcome = factor(gpheno.v$Outcone, levels=c('Regression', 'Progression')), row.names = gpheno.v$sampleID)
 # pheatmap(gdata.v[intersect(gene.lists$all.immune, rownames(gdata.v)),], annotation_col = annot.gxn, scale='row', show_rownames = F, show_colnames = F, cutree_cols = 2)
 
@@ -326,8 +325,6 @@ fig.d <- ggplot(plotdata, aes(x=group, y=pc.lym)) +
   stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3)
   # geom_signif(comparisons = list(c('1','2'), c('2','3')))
 
-library("grid")
-library("ggplotify")
 fig <- plot_grid(as.grob(fig.a), as.grob(fig.b), fig.c, fig.d, nrow = 2, labels=c('a','b','c','d'), rel_heights = c(5,3))
 
 save_plot(paste0(figdir, "fig2.pdf"), fig, nrow = 2, ncol=2, base_width = fig.width/2)
@@ -522,30 +519,45 @@ fig.a <- ggplot(uvv, aes(x=logratio, y=-log(fdr))) +
 # b-d) TGFB story 
 samples <- pheno[which(pheno$Stroma.GXN),]
 pdan.data <- rbind(
-  cbind(gdata.danaher.t[samples$SampleID,], data.frame(type='tissue', Outcome=samples$Outcome, sampleID=samples$SampleID)),
-  cbind(gdata.danaher.s[samples$SampleID,], data.frame(type='stroma', Outcome=samples$Outcome, sampleID=samples$SampleID))
+  cbind(gdata.danaher.t[samples$SampleID,], data.frame(type='tissue', Outcome=samples$Outcome, sampleID=samples$SampleID, patient=samples$Patient.Number)),
+  cbind(gdata.danaher.s[samples$SampleID,], data.frame(type='stroma', Outcome=samples$Outcome, sampleID=samples$SampleID, patient=samples$Patient.Number))
 )
 
 # Add FTGFB and TIL gradient calculations to samples data frame
 samples$til.gradient <- as.numeric(gdata.danaher.t[samples$SampleID,]$til.score) - as.numeric(gdata.danaher.s[samples$SampleID,]$til.score)
+# samples$cd8.gradient <- as.numeric(gdata.danaher.t[samples$SampleID,]$`Cytotoxic cells`) - as.numeric(gdata.danaher.s[samples$SampleID,]$`Cytotoxic cells`)
+# samples$treg.gradient <- as.numeric(gdata.danaher.t[samples$SampleID,]$Treg) - as.numeric(gdata.danaher.s[samples$SampleID,]$Treg)
 samples$ftgfb <- do.ftgfb(gdata.pair.s[,samples$SampleID])
+
+# Paired comparison of regressive patients, TIL score tissue vs stroma
+# Calculate a p-value for all samples, p and r:
+p <- compare.fn(til.score ~ type + (1 | sampleID) + (1 | patient), data=pdan.data)
+write(paste0("Paired comparison of TIL score tissue vs stroma in ALL samples, p= ", signif(p$p, 3)), file = opfile, append = T)
+p <- compare.fn(til.score ~ type + (1 | sampleID) + (1 | patient), data=pdan.data[which(pdan.data$Outcome == 'Regression'),])
+write(paste0("Paired comparison of TIL score tissue vs stroma in REGRESSIVE samples, p= ", signif(p$p, 3)), file = opfile, append = T)
+p <- compare.fn(til.score ~ type + (1 | sampleID) + (1 | patient), data=pdan.data[which(pdan.data$Outcome == 'Progression'),])
+write(paste0("Paired comparison of TIL score tissue vs stroma in PROGRESSIVE samples, p= ", signif(p$p, 3)), file = opfile, append = T)
 
 plotdata <- pdan.data[pdan.data$Outcome == 'Regression',]
 plotdata$type <- str_to_title(plotdata$type)
-fig.b <- ggplot(plotdata, aes(x=type, y=til.score, fill = type)) + 
-  geom_boxplot() +
+p <- compare.fn(til.score ~ type + (1 | sampleID) + (1 | patient), data = plotdata, comparison = list("Tissue", "Stroma"))
+fig.b <- ggplot(plotdata, aes(x=type, y=til.score)) + 
+  geom_boxplot(aes(fill = type)) +
   geom_line(aes(x=type, y=til.score, group=sampleID), colour='grey') +
   geom_point() +
+  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01) +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
   ylab("TIL score")
 
 plotdata <- pdan.data[pdan.data$Outcome == 'Progression',]
 plotdata$type <- str_to_title(plotdata$type)
-fig.c <- ggplot(plotdata, aes(x=type, y=til.score, fill = type)) + 
-  geom_boxplot() +
+p <- compare.fn(til.score ~ type + (1 | sampleID) + (1 | patient), data = plotdata, comparison = list("Tissue", "Stroma"))
+fig.c <- ggplot(plotdata, aes(x=type, y=til.score)) + 
+  geom_boxplot(aes(fill = type)) +
   geom_line(aes(x=type, y=til.score, group=sampleID), colour='grey') +
   geom_point() +
+  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01) +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
   ylab("TIL score")
@@ -554,12 +566,13 @@ fig.d <- ggplot(samples, aes(x=ftgfb, y=til.gradient)) +
   geom_point(aes(color=Outcome)) +
   xlab("FTGFB signature") + ylab("TIL gradient") +
   guides(color=FALSE) +
-  geom_smooth(method = lm) +
+  geom_smooth(method = 'lm') +
   stat_cor()
 
 # e-f) TNFSF9 boxplots (CIS and TCGA)
 plotdata <- data.frame(
   tnfsf9 = as.numeric(gdata.pair.t["TNFSF9",]),
+  tnfrsf9 = as.numeric(gdata.pair.t["TNFRSF9",]),
   Outcome = gsub("ression", ".", gpheno.pair$Outcome),
   patient = factor(gpheno.pair$Patient.Number)
 )
@@ -575,6 +588,7 @@ fig.e <- ggplot(plotdata, aes(x=Outcome, y=tnfsf9)) +
 load('data/gdata.tcga.lusc.RData')
 plotdata <- data.frame(
   tnfsf9 = log(as.numeric(gdata.tcga.lusc["TNFSF9",])),
+  tnfrsf9 = log(as.numeric(gdata.tcga.lusc["TNFRSF9",])),
   outcome = gpheno.tcga.lusc$sample_type, 
   stringsAsFactors = F
 )
@@ -781,7 +795,6 @@ if(file.exists(circos.cmd)){
   # library(BSgenome.Hsapiens.UCSC.hg19)
   
   # Label relevant genes. Use biomaRt to find locations
-  library(biomaRt)
   ensembl=useMart("ensembl",dataset="hsapiens_gene_ensembl", host="grch37.ensembl.org")
   # Get all genes
   bm <- getBM(
@@ -1012,7 +1025,7 @@ gmcors.tcga <- gmcors.tcga[order(gmcors.tcga$p),]
 
 
 
-library(ggpubr)
+
 tcga.plots <- list()
 cis.plots <- list()
 ol <- pheno[which(pheno$Methylation & pheno$Gene.expression),]
@@ -1124,7 +1137,6 @@ fig.c <- ggplot(x[sel,], aes(x=ubiq.HLA.C.loss, y=m.hla.c)) +
   ylab("HLA-C mean beta value")
 
 # Correlate methyltransferase CNs with HLA-A/B/C beta values
-library(foreach)
 sel <- which(gm.tcga.pheno$PatientBarcode %in% colnames(tcga.cn.table))
 mts <- intersect(gene.lists$methyltransferases, rownames(tcga.cn.table))
 methcor <- foreach(gene = mts, .combine = rbind) %do% {
@@ -1141,7 +1153,6 @@ methcor <- foreach(gene = mts, .combine = rbind) %do% {
 }
 methcor$p.adj <- p.adjust(methcor$p)
 # Annotate with genomic locations
-library(biomaRt)
 mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
 bm <- getBM(attributes = c("hgnc_symbol", "chromosome_name", "band"),
             filters    = "hgnc_symbol",
@@ -1321,6 +1332,7 @@ WriteXLS(list(pheno.public, gs, ms, geno.sum, mhc.muts), row.names = T,
 uvv <- limmaCompare(gdata.v[intersect(gene.lists$checkpoints, rownames(gdata.v)),], gpheno.v, fdr_limit = 1)
 sel <- which(uvv$fdr < 0.05)
 write(paste0("PvR Limma analysis limited to immunomodulators: sig genes ", paste(paste(rownames(uvv)[sel], uvv$fdr[sel], sep=','), sep = '; ')), file = opfile, append = T)
+write(paste0("Corresponding p-value for receptor TNFSRSF9: ", uvv["TNFRSF9",]$fdr), file = opfile, append = T)
 
 # Comparison of HLA types between prog and reg
 # Find all known HLA types - limit to 4 point resolution
