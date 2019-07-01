@@ -28,18 +28,25 @@ plotMethylForGene <- function(gene, do.plot=T) {
     ggtitle(gene)
   for(feature in as.character(unique(df$feature))) {
     
+    fmin <- min(df$MAPINFO[which(df$feature == feature)])
+    fmax <- max(df$MAPINFO[which(df$feature == feature)])
+    
     p <- p + annotate(
       "segment", 
-      x = min(df$MAPINFO[which(df$feature == feature)]), xend = max(df$MAPINFO[which(df$feature == feature)]), 
+      x = fmin, xend = fmax, 
       y = -0.1, yend = -0.1,
       colour = "#cccccc", size = 1.5
     )
+    
+    # Avoid labelling very small, cramped features
+    if(fmax - fmin < 40) { next }
+    
     p <- p + annotate(
       'text', 
       x = mean(df$MAPINFO[which(df$feature == feature)]),
       y = -0.15,
       label = c(feature),
-      cex = 3
+      cex = 2.5
     )
   }
 
