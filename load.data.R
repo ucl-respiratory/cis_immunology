@@ -78,6 +78,46 @@ pheno$Age.at.bronchoscopy[match(mpheno$Sample_Name, pheno$Sample.Number..Meth.)]
 pheno$COPD[which(pheno$COPD == "Y")] <- "YES"
 pheno$COPD[which(pheno$COPD == "N")] <- "NO"
 
+# Match additional data for patients not previously published
+clinical <- read.xls('resources/clinical_summaries.xls', stringsAsFactors=F)
+clinical$ID <- as.numeric(clinical$ID)
+clinical$Sex <- substr(clinical$Sex, 1, 1)
+clinical$uuid <- str_pad(clinical$ID, 3,pad = '0')
+
+x <- pheno
+x$uuid <- str_pad(x$Patient.Number, 3, pad='0')
+x <- merge(x, clinical, by='uuid', all.x=T)
+
+# Fix date formats
+for(i in 1:dim(x)[1]) {
+  if(grepl("[0-9]+/[0-9]+/[0-9]+", x$Biopsy.Date[i])) {
+    x$Biopsy.Date[i] <- as.character(as.Date(x$Biopsy.Date[i], format = "%d/%m/%Y"))
+  }
+}
+
+# Fill in gaps
+sel <- which(is.na(x$Gender) & !is.na(x$Sex))
+x$Gender[sel] <- x$Sex[sel]
+sel <- which(is.na(x$Pack.years) & !is.na(x$PackYears))
+x$Pack.years[sel] <- x$PackYears[sel]
+x$age2 <- as.numeric(floor((as.Date(x$Biopsy.Date) - as.Date(x$DOB))/365))
+sel <- which(is.na(x$Age.at.bronchoscopy) & !is.na(x$age2))
+x$Age.at.bronchoscopy[sel] <- x$age2[sel]
+x$COPD.y <- ifelse(x$COPD.y, 'YES', 'NO')
+sel <- which(is.na(x$COPD.x) & !is.na(x$COPD.y))
+x$COPD.x[sel] <- x$COPD.y[sel]
+
+# Find outstanding issues - some without smoking history:
+# View(x[which((is.na(x$Gender) | is.na(x$Pack.years) | is.na(x$Age.at.bronchoscopy) | is.na(x$COPD.x)) & x$Outcome != 'Control'),])
+
+# Copy back to pheno
+sel <- match(pheno$SampleID, x$SampleID)
+pheno$Gender <- x$Gender[sel]
+pheno$Pack.years <- x$Pack.years[sel]
+pheno$Age.at.bronchoscopy <- x$Age.at.bronchoscopy[sel]
+pheno$COPD <- x$COPD.x[sel]
+
+
 # Re-label data to match pheno
 colnames(gdata) <- pheno$SampleID[match(colnames(gdata), pheno$Sample.Number..GXN.)]
 gpheno$sampleID <- pheno$SampleID[match(gpheno$name, pheno$Sample.Number..GXN.)]

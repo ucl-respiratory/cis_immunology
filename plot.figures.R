@@ -1,6 +1,6 @@
 # Create all figures and supplementary data for this paper.
 
-version <- 0.8
+version <- "0.11"
 
 # Output directory
 figdir <- paste0("~/Dropbox/CIS_Immunology/cis_immunology2/results/v", version, "/figures/")
@@ -31,7 +31,8 @@ write.csv(version.data, file = vfile)
 fig.width <- 7.204
 fig.maxheight <- 9.72
 
-theme_set(theme_cowplot(font_size=10))
+# Format figures in 12 point Times New Roman (suggested by Nature formatting guide)
+theme_set(theme_cowplot(font_size=11, font_family = "Times"))
 
 ###############################################################################################
 # Load data
@@ -59,7 +60,7 @@ gm.tcga.pheno$PatientBarcode <- substr(gm.tcga.pheno$submitter_id2, 1, 12)
 
 # Include a pheno data frame with no duplicated patients (e.g. for HLA analysis).
 # Prioritise multi-omic samples.
-pheno.nodups <- pheno[order(pheno$Methylation, pheno$Whole.Genome.Sequencing, pheno$Stroma.GXN, pheno$Gene.expression, pheno$HandE, pheno$Nanostring, pheno$IHC, pheno$IHC_K, decreasing = T),]
+pheno.nodups <- pheno[order(pheno$Methylation, pheno$Whole.Genome.Sequencing, pheno$Stroma.GXN, pheno$Gene.expression, pheno$HandE, pheno$Nanostring, pheno$IHC_K, decreasing = T),]
 pheno.nodups <- pheno.nodups[which(!duplicated(pheno.nodups$Patient.Number)),]
 
 ###############################################################################################
@@ -123,10 +124,45 @@ sel <- which(pheno$SampleID %in% colnames(mdata.nosnp))
 pheno$total.meth.nosnp[sel] <- apply(mdata.nosnp[,pheno$SampleID[sel]], 2, function(x) {mean(x, na.rm=T)})
 pheno$median.meth.nosnp[sel] <- apply(mdata.nosnp[,pheno$SampleID[sel]], 2, function(x) {median(x, na.rm=T)})
 
+
+##############################################################################
+# IHC quantification data
+##############################################################################
+load("data/ihc_quant.RData")
+# Recalculate percentages (note that here hems represents cells identified on haematoxylin stain that are negative for other markers):
+preinvSum$total.cells <- (preinvSum$hems_IHC + preinvSum$cd4s + preinvSum$cd8s + preinvSum$foxp3s)
+preinvSum$cd4_per <- preinvSum$cd4s / preinvSum$total.cells
+preinvSum$cd8_per <- preinvSum$cd8s / preinvSum$total.cells
+preinvSum$foxp3_per <- preinvSum$foxp3s / preinvSum$total.cells
+preinvSum2$total.cells <- (preinvSum2$hems_IHC + preinvSum2$cd4s + preinvSum2$cd8s + preinvSum2$foxp3s)
+preinvSum2$cd4_per <- preinvSum2$cd4s / preinvSum2$total.cells
+preinvSum2$cd8_per <- preinvSum2$cd8s / preinvSum2$total.cells
+preinvSum2$foxp3_per <- preinvSum2$foxp3s / preinvSum2$total.cells
+
+# Match to pheno
+preinvSum$SampleID <- pheno$SampleID[match(preinvSum$FileName, paste0(gsub(" ", "_", str_trim(pheno$Sample.Number..IHC_K.)), "IHC.ndpi"))]
+preinvSum$patient <- pheno$Patient.Number[match(preinvSum$FileName, paste0(gsub(" ", "_", str_trim(pheno$Sample.Number..IHC_K.)), "IHC.ndpi"))]
+
+# Annotate the pheno data frame for downstream analysis
+preinvSum.cis <- preinvSum[which(preinvSum$site == 'CIS'),]
+preinvSum.stroma <- preinvSum[which(preinvSum$site == 'Stroma'),]
+
+pheno <- merge(pheno, preinvSum.cis, by='SampleID', all.x=T)
+colnames(preinvSum.stroma) <- paste0('stroma_', colnames(preinvSum.stroma))
+pheno <- merge(pheno, preinvSum.stroma, by.x='SampleID', by.y='stroma_SampleID', all.x=T)
+
+pheno$cd4_grad <- pheno$cd4_per - pheno$stroma_cd4_per
+pheno$cd8_grad <- pheno$cd8_per - pheno$stroma_cd8_per
+pheno$stroma_foxp3_per <- pheno$stroma_foxp3_per - pheno$stroma_foxp3_per
+
+# Correct some variables after merging
+pheno$Outcome <- pheno$Outcome.x
+
 ##############################################################################
 # Imaging data
 ##############################################################################
 # Load image data, annotate pheno
+# Note that this overwrites the preinvSum and preinvSum2 variables above
 load('data/image_data_cache.RData')
 # Add patient ID to imaging data:
 preinvSum$patient <- pheno$Patient.Number[match(preinvSum$UniqueID, pheno$HandE.SampleID)]
@@ -148,6 +184,7 @@ pheno$lym_grad <- unlist(lapply(pheno$HandE.SampleID, function(sid) {
   preinvSum.cis$lymphocyte_per[match(sid, preinvSum.cis$UniqueID)] - preinvSum.stroma$lymphocyte_per[match(sid, preinvSum.cis$UniqueID)]
 }))
 
+
 ##############################################################################
 # Figure 1: IHC and Danaher data
 # TODO: adjust for patient ID
@@ -158,40 +195,30 @@ message("Plotting Figure 1")
 # d - Danaher TIL scores
 # e - MethylCS pc scores
 # f - imaging data
-ihc$Outcome <- factor(ifelse(ihc$progression == 1, "Progression", "Regression"))
-ihc$patient <- factor(pheno$Patient.Number[match(ihc$sampleID, pheno$SampleID)])
 
-fig.a <- ggdraw() + draw_image("resources/fig1_progressive.jpg", scale=0.95)
-fig.b <- ggdraw() + draw_image("resources/fig1_regressive.jpg", scale=0.95)
+fig.a <- ggdraw() + draw_image("resources/fig1_progressive.jpg", scale=0.95) +
+  draw_label('Progressive CIS lesion', y=0.13, size = 11)
+fig.b <- ggdraw() + draw_image("resources/fig1_regressive.jpg", scale=0.95) +
+  draw_label('Regressive CIS lesion', y=0.13, size = 11)
 fig.ab <- plot_grid(fig.a, fig.b, labels=c('a','b'))
 
-# plotdata <- rbind(
-#   # cbind(ihc, data.frame(val=ihc$CD4, cell="CD4")),
-#   cbind(ihc, data.frame(val=ihc$CD8, cell="CD8"))
-#   # cbind(ihc, data.frame(val=ihc$FOXP3, cell="FOXP3"))
-# )
-# Find p-values manually using ANOVA, adjusting for patient:
-# Uses + as we ignore the progression/patient interaction here.
-# p.cd4 <- aov(CD4 ~ factor(progression) + factor(patient), data=ihc)
-# p.cd4 <- signif(summary(p.cd4)[[1]]["factor(progression)","Pr(>F)"],2)
-# p.cd8 <- aov(CD8 ~ factor(progression) + factor(patient), data=ihc)
-# p.cd8 <- signif(summary(p.cd8)[[1]]["factor(progression)","Pr(>F)"],2)
-# p.foxp3 <- aov(FOXP3 ~ factor(progression) + factor(patient), data=ihc)
-# p.foxp3 <- signif(summary(p.foxp3)[[1]]["factor(progression)","Pr(>F)"],2)
 
-# Manual adding of p-values as annotation taken from this guide: https://stackoverflow.com/questions/45136550/how-to-annotate-different-values-for-each-facet-bar-plot-on-r
-plotdata <- ihc
+# Plot IHC data
+plotdata <- pheno[which(pheno$IHC_K),]
+# plotdata <- ihc
 plotdata$Outcome <- gsub("ression", ".", plotdata$Outcome)
-p.cd4 <- compare.fn(CD4 ~ Outcome + (1 | patient), data = plotdata)
-p.cd8 <- compare.fn(CD8 ~ Outcome + (1 | patient), data = plotdata)
-p.foxp3 <- compare.fn(FOXP3 ~ Outcome + (1 | patient), data = plotdata)
-p.cd8foxp3 <- compare.fn(CD8/FOXP3 ~ Outcome + (1 | patient), data = plotdata)
+p.cd4 <- compare.fn(cd4_perArea ~ Outcome + (1 | patient), data = plotdata)
+p.cd8 <- compare.fn(cd8_perArea ~ Outcome + (1 | patient), data = plotdata)
+p.foxp3 <- compare.fn(foxp3_perArea ~ Outcome + (1 | patient), data = plotdata)
+# Assess _net_ cytotoxic activity (CD8/FOXP3), excluding samples with no FOXP3 cells
+p.cd8foxp3 <- compare.fn(cd8_perArea/foxp3_perArea ~ Outcome + (1 | patient), data = plotdata[which(plotdata$foxp3_perArea > 0),])
 
-# Plot only CD8
-fig.c <- ggplot(plotdata, aes(x=Outcome, y=CD8)) + 
+# Plot only CD8 here (only this is significant)
+fig.c <- ggplot(plotdata, aes(x=Outcome, y=cd8_perArea)) + 
   geom_boxplot(aes(fill = Outcome)) +
-  geom_dotplot(binaxis = 'y', stackdir = 'center', dotsize = 0.5) +
-  stat_pvalue_manual(p.cd8, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  # geom_dotplot(binaxis = 'y', stackdir = 'center', dotsize = 0.1) +
+  geom_point() +
+  stat_pvalue_manual(p.cd8, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   # geom_signif(comparisons = list(c("Progression","Regression")), annotations = 'tmp') +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
@@ -204,6 +231,24 @@ write(paste0("CD8 P vs R p=", p.cd8$p), file = opfile, append = T)
 write(paste0("FOXP3 P vs R p=", p.foxp3$p), file = opfile, append = T)
 write(paste0("CD8:FOXP3 P vs R p=", p.cd8foxp3$p), file = opfile, append = T)
 
+# Include stromal comparisons here
+p.cd4s <- compare.fn(stroma_cd4_perArea ~ Outcome + (1 | patient), data = plotdata)
+p.cd8s <- compare.fn(stroma_cd8_perArea ~ Outcome + (1 | patient), data = plotdata)
+p.foxp3s <- compare.fn(stroma_foxp3_perArea ~ Outcome + (1 | patient), data = plotdata)
+p.cd8foxp3s <- compare.fn(stroma_cd8_perArea/stroma_foxp3_perArea ~ Outcome + (1 | patient), data = plotdata[which(plotdata$stroma_foxp3_perArea > 0),])
+write(paste0("Stromal CD4 P vs R p=", p.cd4s$p), file = opfile, append = T)
+write(paste0("Stromal CD8 P vs R p=", p.cd8s$p), file = opfile, append = T)
+write(paste0("Stromal FOXP3 P vs R p=", p.foxp3s$p), file = opfile, append = T)
+write(paste0("Stromal CD8:FOXP3 P vs R p=", p.cd8foxp3s$p), file = opfile, append = T)
+
+# Lastly include analyses of gradient (CIS concentration - stromal concentration)
+p.cd4g <- compare.fn(cd4_perArea - stroma_cd4_perArea ~ Outcome + (1 | patient), data = plotdata)
+p.cd8g <- compare.fn(cd8_perArea - stroma_cd8_perArea ~ Outcome + (1 | patient), data = plotdata)
+p.foxp3g <- compare.fn(foxp3_perArea - stroma_foxp3_perArea ~ Outcome + (1 | patient), data = plotdata)
+write(paste0("CIS - Stromal CD4 P vs R p=", p.cd4s$p), file = opfile, append = T)
+write(paste0("CIS - Stromal CD8 P vs R p=", p.cd8s$p), file = opfile, append = T)
+write(paste0("CIS - Stromal FOXP3 P vs R p=", p.foxp3s$p), file = opfile, append = T)
+
 
 # Danaher TIL scores
 plotdata <- data.frame(til.score = gdata.danaher.t$til.score, Outcome = gpheno.pair$Outcome, patient = factor(gpheno.pair$Patient.Number))
@@ -212,26 +257,11 @@ p <- compare.fn(til.score ~ Outcome + (1 | patient), data = plotdata)
 fig.d <- ggplot(plotdata, aes(x=Outcome, y=til.score)) +
   geom_boxplot(aes(fill=Outcome)) +
   geom_point() +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
   ylab('Danaher TIL score')
 
-
-# p <- compare.fn(til.score ~ outcome + (1 | patient), data = plotdata)
-# ggplot(plotdata, aes(x=outcome, y=til.score)) +
-#   geom_boxplot(aes(fill = outcome)) +
-#   geom_point() +
-#   stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01) +
-#   guides(fill=FALSE) +
-#   theme(axis.title.x = element_blank()) +
-#   ylab('Danaher TIL score')
-
-# p <- aov(gdata.danaher.t$til.score ~ factor(gpheno.pair$Outcome) + factor(gpheno.pair$Patient.Number))
-# p <- signif(summary(p)[[1]]["factor(progression)","Pr(>F)"],2)
-# fig.d <- ggplot_build(fig.d)
-# fig.c$data[[3]]$annotation <- c(rep(p.cd8, 3))
-# fig.c <- ggplot_gtable(fig.c)
 
 # methylCS scores:
 sel <- which(mpheno$Sample_Group %in% c("Progressive", "Regressive"))
@@ -242,10 +272,10 @@ p <- compare.fn(pc.immune ~ Outcome + (1 | patient), data = plotdata)
 fig.e <- ggplot(plotdata, aes(x=Outcome, y=pc.immune)) +
   geom_boxplot(aes(fill=Outcome)) +
   geom_point() +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
-  ylab('MethylCIBERSORT % immune cells')
+  ylab('MethylCIBERSORT % immune cells') 
 
 
 # Imaging data:
@@ -256,7 +286,7 @@ p <- compare.fn(lymphocyte_per ~ Outcome + (1 | patient), data = plotdata)
 fig.f <- ggplot(plotdata, aes(x=Outcome, y=lymphocyte_per)) +
   geom_boxplot(aes(fill=Outcome)) +
   geom_point() +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
   ylab('% lymphocytes on H&E')
@@ -283,49 +313,69 @@ fig.a <- pheatmap(t(gdata.danaher.t[,-c(2,15,16)]), annotation_col = annot.gxn, 
 # Exclude Controls - these won't have TILs as they are brushings
 annot.meth <- data.frame(outcome = factor(mpheno$Sample_Group, levels=c('Regressive', 'Progressive')), row.names = mpheno$sampleID)
 sel <- which(annot.meth$outcome %in% c("Progressive", "Regressive"))
-fig.b <- pheatmap(t(methCS[sel,1:11]), annotation_col = annot.meth, show_colnames = F, legend = F, cutree_cols = 2, annotation_legend = F, treeheight_row = 0)
-# fig.b <- pheatmap(t(methCS[sel,1:11]), annotation_col = annot.meth, show_colnames = F, legend = F, cutree_cols = 2, annotation_legend = F, scale='row')
-# fig.b <- pheatmap(t(methCS[sel,c(2,3,4,5,6,8,10,11)]), annotation_col = annot.meth, show_colnames = F, legend = F, cutree_cols = 4, annotation_legend = F, scale='row')
-# fig.b <- pheatmap(t(methCS[sel,c(2,3,4,5,6,8,10,11)]), annotation_col = annot.meth, show_colnames = F, legend = F, cutree_cols = 2, annotation_legend = F, scale='none')
+plotdata <- t(methCS[sel, 1:11])
+# Rename some columns
+rownames(plotdata)[which(rownames(plotdata) == 'Eos')] <- 'Eosinophils'
+rownames(plotdata)[which(rownames(plotdata) == 'CD4_Eff')] <- 'CD4'
+rownames(plotdata)[which(rownames(plotdata) == 'Neu')] <- 'Neutrophils'
+fig.b <- pheatmap(plotdata, annotation_col = annot.meth, show_colnames = F, legend = F, cutree_cols = 2, annotation_legend = F, treeheight_row = 0)
 
 # This shows a cluster with lots of cancer i.e. low immune infiltration
 
 # Show the groups TIL score / percent lymphocytes
 groups <- cutree(fig.a$tree_col, k = 2)
 plotdata <- data.frame(
-  group = factor(groups, levels = c(2,1)),
+  group = factor(groups, levels = c(2,1), labels = c('cold', 'hot')),
   til.score = gdata.danaher.t[names(groups), 'til.score'],
   Outcome = gpheno.pair$Outcome[match(names(groups), gpheno.pair$SampleID)],
   patient = gpheno.pair$Patient.Number[match(names(groups), gpheno.pair$SampleID)]
 )
-p <- compare.fn(til.score ~ group + (1 | patient), data = plotdata, comparison=list('1','2'))
+p <- compare.fn(til.score ~ group + (1 | patient), data = plotdata, comparison=list('hot','cold'))
 fig.c <- ggplot(plotdata, aes(x=group, y=til.score)) +
   geom_boxplot() +
   geom_point(aes(color=Outcome)) +
   xlab("Cluster") +
   ylab("TIL score") +
-  stat_pvalue_manual(p, xmin = "group1", xmax="group2", tip.length = 0.01, size=3)
+  stat_pvalue_manual(p, xmin = "group1", xmax="group2", label = "p={p}", tip.length = 0.01, size=3) +
+  theme(axis.title.x = element_blank()) +
+  guides(color=F)
   # geom_signif(comparisons = list(c('1','2')))
   # guides(color=F)
 
 groups <- cutree(fig.b$tree_col, k = 2)
 plotdata <- data.frame(
-  group = factor(groups, levels = c(1,2)),
+  group = factor(groups, levels = c(1,2), labels=c('cold', 'hot')),
   pc.lym = rowSums(methCS[sel,c(2,3,4,5,6,8,10,11)]),
   Outcome = mpheno$Sample_Group[match(names(groups), mpheno$sampleID)],
   patient = mpheno$Patient_ID[match(names(groups), mpheno$sampleID)]
 )
-p <- compare.fn(pc.lym ~ group + (1 | patient), data = plotdata, comparison = list('1', '2'))
+p <- compare.fn(pc.lym ~ group + (1 | patient), data = plotdata, comparison = list('hot', 'cold'))
 fig.d <- ggplot(plotdata, aes(x=group, y=pc.lym)) +
   geom_boxplot() +
   geom_point(aes(color=Outcome)) +
   xlab("Cluster") +
   ylab("% immune cells") +
-  # annotate('text', x=1, y=0.45, label = paste0("ANOVA p=", p$p), size=3)
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3)
-  # geom_signif(comparisons = list(c('1','2'), c('2','3')))
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  theme(axis.title.x = element_blank()) +
+  guides(color=F)
 
-fig <- plot_grid(as.grob(fig.a), as.grob(fig.b), fig.c, fig.d, nrow = 2, labels=c('a','b','c','d'), rel_heights = c(5,3))
+fig.main <- plot_grid(as.grob(fig.a), as.grob(fig.b), fig.c, fig.d, nrow = 2, labels=c('a','b','c','d'), rel_heights = c(5,3))
+
+# Make a separate legend plot under the others
+plotdata <- data.frame(
+  x=c(0.25,1.1),
+  y=c(1,1),
+  label = c('Progressive', 'Regressive')
+)
+leg <- ggplot(plotdata, aes(x=x, y=y, label=label)) +
+  geom_point(aes(color=label)) +
+  xlim(-1,2.5) +
+  geom_label(nudge_x = 0.33, label.size = 0) +
+  guides(color=F) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank()) +
+  annotate('text', x=-0.25, y=1, label="Outcome:")
+
+fig <- plot_grid(fig.main, leg, ncol = 1, rel_heights = c(15,1))
 
 save_plot(paste0(figdir, "fig2.pdf"), fig, nrow = 2, ncol=2, base_width = fig.width/2)
 
@@ -335,12 +385,13 @@ save_plot(paste0(figdir, "fig2.pdf"), fig, nrow = 2, ncol=2, base_width = fig.wi
 ##############################################################################
 # Figure 3: Summary of genomic, epigenetic and transcriptomic changes
 ##############################################################################
+message("Plotting Figure 3")
 
 # Find muts in these genes only and check VEP status
 mhc.muts <- muts.all[which(muts.all$gene %in% gene.lists$hla.assoc),]
 #mhc.muts <- muts.all[which(muts.all$gene %in% tgfb.genes),]
 
-p <- pheno[which(pheno$Whole.Genome.Sequencing | pheno$Methylation | pheno$Stroma.GXN),]
+p <- pheno[which((pheno$Whole.Genome.Sequencing | pheno$Methylation | pheno$Stroma.GXN) & pheno$Outcome != 'Control'),]
 p <- p[order(p$Whole.Genome.Sequencing, p$Methylation, p$Stroma.GXN),]
 hla.changes <- muts.for.plotting(gene.lists$hla.assoc, pheno = p)
 
@@ -489,9 +540,6 @@ write(paste0("*Genomic* Aberrations in HLA genes were more common in progressive
 p <- compare.fn(count/burden ~ Outcome + (1 | patient), data = hla.genomic.by.sample)
 write(paste0("Genomic Aberrations in HLA genes were more common in progressive samples even after correcting for overall mutational burden (p=", p$p, ")"), file = opfile, append = T)
 
-# wilcox.test(hla.changes.by.sample$count.corr ~ hla.changes.by.sample$Outcome)
-
-
 # Add some additional comparisons:
 # HLA-A GXN changes:
 plotdata <- data.frame(
@@ -506,6 +554,8 @@ write(paste0("Expression of HLA-A was correspondingly reduced in progressive com
 # Figure 4: TIL plots PvsR; TIL gradient vs FTGFB; IHC + hotspot analysis
 # Awaiting data for second part
 ##############################################################################
+message("Plotting Figure 4")
+
 # a) Stromal volcano plot (showing no differences)
 uvv <- limmaCompare(gdata.pair.s, gpheno.pair, fdr_limit = 1)
 fig.a <- ggplot(uvv, aes(x=logratio, y=-log(fdr))) +
@@ -525,8 +575,6 @@ pdan.data <- rbind(
 
 # Add FTGFB and TIL gradient calculations to samples data frame
 samples$til.gradient <- as.numeric(gdata.danaher.t[samples$SampleID,]$til.score) - as.numeric(gdata.danaher.s[samples$SampleID,]$til.score)
-# samples$cd8.gradient <- as.numeric(gdata.danaher.t[samples$SampleID,]$`Cytotoxic cells`) - as.numeric(gdata.danaher.s[samples$SampleID,]$`Cytotoxic cells`)
-# samples$treg.gradient <- as.numeric(gdata.danaher.t[samples$SampleID,]$Treg) - as.numeric(gdata.danaher.s[samples$SampleID,]$Treg)
 samples$ftgfb <- do.ftgfb(gdata.pair.s[,samples$SampleID])
 
 # Paired comparison of regressive patients, TIL score tissue vs stroma
@@ -545,7 +593,7 @@ fig.b <- ggplot(plotdata, aes(x=type, y=til.score)) +
   geom_boxplot(aes(fill = type)) +
   geom_line(aes(x=type, y=til.score, group=sampleID), colour='grey') +
   geom_point() +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
   ylab("TIL score")
@@ -557,7 +605,7 @@ fig.c <- ggplot(plotdata, aes(x=type, y=til.score)) +
   geom_boxplot(aes(fill = type)) +
   geom_line(aes(x=type, y=til.score, group=sampleID), colour='grey') +
   geom_point() +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
   guides(fill=FALSE) +
   theme(axis.title.x = element_blank()) +
   ylab("TIL score")
@@ -581,9 +629,28 @@ fig.e <- ggplot(plotdata, aes(x=Outcome, y=tnfsf9)) +
   geom_boxplot(aes(fill=Outcome)) +
   geom_point() +
   guides(fill=F) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
   ylab('CIS TNFSF9 expression') +
   theme(axis.title.x = element_blank())
+
+# Also check the correlation of TNFSF9 with predicted NK cells
+samps <- pheno$SampleID[which(pheno$Stroma.GXN)]
+ctypes = colnames(gdata.danaher.t)[-c(2,15)]
+df <- data.frame(
+  ctype = ctypes,
+  r2 = unlist(lapply(ctypes, function(x) {
+    cor.test(gdata.danaher.t[samps, x], as.numeric(gdata.pair.t["TNFSF9",samps]))$estimate
+  })),
+  p = unlist(lapply(ctypes, function(x) {
+    cor.test(gdata.danaher.t[samps, x], as.numeric(gdata.pair.t["TNFSF9",samps]))$p.value
+  }))
+)
+df$p.adj <- p.adjust(df$p)
+rownames(df) <- df$ctype
+
+write(paste0("Correlation of Cytotoxic cells with TNFSF9 expression, r2 = ", df["Cytotoxic cells",'r2']," p= ", signif(df["Cytotoxic cells",'p'], 3)), file = opfile, append = T)
+write(paste0("Correlation of NK cells with TNFSF9 expression, r2 = ", df["NK cells",'r2']," p= ", signif(df["NK cells",'p'], 3)), file = opfile, append = T)
+
 
 load('data/gdata.tcga.lusc.RData')
 plotdata <- data.frame(
@@ -594,11 +661,20 @@ plotdata <- data.frame(
 )
 plotdata$outcome[which(plotdata$outcome == 'Solid Tissue Normal')] <- 'Control'
 plotdata$outcome <- factor(plotdata$outcome, levels=c('Primary Tumor', 'Control'))
-fig.f <- ggplot(plotdata, aes(x=outcome, y=tnfsf9, fill=outcome)) +
-  geom_boxplot() +
+
+# Manually create a variable for stat_pvalue_manual using a Wilcox test (no samples here from theh same patient)
+p <- tibble(
+  .y. = 'tnfsf9',
+  group1 = 'Primary Tumor',
+  group2 = 'Control',
+  p=signif(wilcox.test(plotdata$tnfsf9 ~ plotdata$outcome)$p.value, 2),
+  y.position = max(plotdata$tnfsf9) + max(plotdata$tnfsf9)/10
+)
+fig.f <- ggplot(plotdata, aes(x=outcome, y=tnfsf9)) +
+  geom_boxplot(aes(fill=outcome)) +
   geom_point() +
   guides(fill=F) +
-  geom_signif(comparisons = list(c('Primary Tumor', 'Control'))) + # OK to use Wilcox here as there are no duplicated patients
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
   ylab('TCGA TNFSF9 expression') +
   theme(axis.title.x = element_blank())
 
@@ -613,37 +689,29 @@ save_plot(paste0(figdir, "fig4.pdf"), fig, nrow = 2, ncol=3, base_width = fig.wi
 # Figure S1
 # Tile figure of what was done to each sample
 ##############################################################################
-# Old pheatmap method:
-# df <- data.frame(
-#   WGS = pheno$Whole.Genome.Sequencing,
-#   Gene.expression = pheno$Stroma.GXN,
-#   Methylation = pheno$Methylation,
-#   IHC = pheno$IHC,
-#   Image.analysis = pheno$HandE,
-#   row.names = pheno$SampleID
-# )
-# df <- apply(df, c(1,2), function(x) {ifelse(x, 1,0)})
-# df <- df[order(rowSums(df),decreasing = T),]
-# pheatmap(df, cluster_rows = F, cluster_cols = F, legend = F, border_color = "black")
+message("Plotting Figure S1")
 
 df <- rbind(
   data.frame(SampleID = pheno$SampleID, mod = "WGS", val = pheno$Whole.Genome.Sequencing),
   data.frame(SampleID = pheno$SampleID, mod = "Gene expression", val = pheno$Stroma.GXN),
   data.frame(SampleID = pheno$SampleID, mod = "Methylation", val = pheno$Methylation),
-  data.frame(SampleID = pheno$SampleID, mod = "IHC", val = pheno$IHC),
+  data.frame(SampleID = pheno$SampleID, mod = "IHC", val = pheno$IHC_K),
   data.frame(SampleID = pheno$SampleID, mod = "Image analysis", val = pheno$HandE)
 )
-df$outcome <- pheno$Outcome[match(df$SampleID, pheno$SampleID)]
+df$outcome <- as.character(pheno$Outcome[match(df$SampleID, pheno$SampleID)])
 df$val[which(df$val == FALSE)] <- NA
 df$val[which(!is.na(df$val))] <- df$outcome[which(!is.na(df$val))]
 df$val <- factor(df$val, levels=c('Progression', 'Regression', 'Control'))
 df$nmods <- unlist(lapply(df$SampleID, function(x) {
   length(which(df$SampleID == x & df$val == TRUE))
 }))
-df <- df[order(df$nmods, df$outcome, decreasing = T),]
-fig <- ggplot(df, aes(x=mod, y=SampleID, fill=val)) +
+df <- df[order(df$outcome, df$nmods, decreasing = T),]
+# df$outcome <- factor(df$outcome)
+df$SampleID <- factor(as.character(df$SampleID), levels=unique(as.character(df$SampleID)))
+
+fig <- ggplot(df[which(df$outcome %in% c("Progression", "Regression")),], aes(x=mod, y=SampleID, fill=val)) +
   geom_tile(aes(width = 0.8, height = 0.8), size=2) +
-  scale_fill_manual(values=c('#F45E5A', '#18B3B7', 'grey'), na.value='#ffffff') +
+  scale_fill_manual(values=c('#F45E5A', '#18B3B7')) +
   theme(axis.title.x = element_blank(), axis.text.y = element_blank(), axis.ticks = element_blank(), legend.title = element_blank()) +
   ylab("Sample")
 
@@ -662,6 +730,7 @@ save_plot(paste0(figdir, "figS1.pdf"), fig, base_width = fig.width)
 #  f) Rank P vs R
 #  g) Depletion stats P vs R
 ##############################################################################
+message("Plotting Figure S2")
 
 c <- cor.test(pheno$neoants.strong, pheno$burden)
 r2 <- paste0("r2=", signif(c$estimate, 2), "; p=", signif(c$p.value,2))
@@ -687,7 +756,7 @@ plotdata$patient <- factor(plotdata$Patient.Number)
 p <- compare.fn(neoants.strong ~ Outcome + (1 | patient), data = plotdata)
 fig.b <- ggplot(plotdata, aes(x=Outcome, y=neoants.strong)) +
   geom_boxplot(aes(fill=Outcome)) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
   geom_point() +
   guides(fill=F) +
@@ -697,7 +766,7 @@ fig.b <- ggplot(plotdata, aes(x=Outcome, y=neoants.strong)) +
 p <- compare.fn(neoants.strong.clonal ~ Outcome + (1 | patient), data = plotdata)
 fig.c <- ggplot(plotdata, aes(x=Outcome, y=neoants.strong.clonal)) +
   geom_boxplot(aes(fill=Outcome)) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
   geom_point() +
   guides(fill=F) +
@@ -707,7 +776,7 @@ fig.c <- ggplot(plotdata, aes(x=Outcome, y=neoants.strong.clonal)) +
 p <- compare.fn(neoants.strong.clonal/neoants.strong ~ Outcome + (1 | patient), data = plotdata)
 fig.d <- ggplot(plotdata, aes(x=Outcome, y=(neoants.strong.clonal / neoants.strong))) +
   geom_boxplot(aes(fill=Outcome)) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
   geom_point() +
   guides(fill=F) +
@@ -727,7 +796,7 @@ neos.all$patient <- factor(pheno$Patient.Number[match(neos.all$sample, pheno$Sam
 p <- compare.fn(log(best.aff) ~ Outcome + (1 | patient), data = neos.all)
 fig.e <- ggplot(neos.all, aes(x=Outcome, y=log(best.aff))) +
   geom_boxplot(aes(fill=Outcome)) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
   geom_point() +
   guides(fill=F) +
@@ -737,7 +806,7 @@ fig.e <- ggplot(neos.all, aes(x=Outcome, y=log(best.aff))) +
 p <- compare.fn(best.rank ~ Outcome + (1 | patient), data = neos.all)
 fig.f <- ggplot(neos.all, aes(x=Outcome, y=best.rank)) +
   geom_boxplot(aes(fill=Outcome)) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
   geom_point() +
   guides(fill=F) +
@@ -748,7 +817,7 @@ p <- compare.fn(best.DAI ~ Outcome + (1 | patient), data = neos.all)
 fig.g <- ggplot(neos.all, aes(x=Outcome, y=best.DAI)) +
   geom_boxplot(aes(fill=Outcome)) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   geom_point() +
   guides(fill=F) +
   ylab("DAI") +
@@ -758,7 +827,7 @@ fig.g <- ggplot(neos.all, aes(x=Outcome, y=best.DAI)) +
 p <- compare.fn(depletion.stat ~ Outcome + (1 | patient), data = plotdata)
 fig.h <- ggplot(plotdata, aes(x=Outcome, y=depletion.stat)) +
   geom_boxplot(aes(fill=Outcome)) +
-  stat_pvalue_manual(p, label='p', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
   geom_point() +
   guides(fill=F) +
@@ -777,6 +846,7 @@ save_plot(paste0(figdir, "figS2.pdf"), fig, ncol=3, nrow=3, base_width = fig.wid
 # Figure S3
 # Methylation DMRs across the genome
 ##############################################################################
+message("Plotting Figure S3")
 
 # Plot DMRs as a circos plot.
 # Skip this plot if the user does not have circos installed.
@@ -990,8 +1060,9 @@ if(file.exists(circos.cmd)){
   fig.b <- ggplot(plotdata2, aes(x=index, y=val, color=Sample_Group)) +
     geom_point() +
     guides(color=FALSE) +
-    theme(axis.title = element_blank(), axis.text.x = element_blank()) +
-    facet_wrap(~probe)
+    theme(axis.title.x = element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+    facet_wrap(~probe) +
+    ylab("Methylation beta value")
   
   fig <- plot_grid(fig.a, fig.b, labels=c('a','b'), ncol=1, nrow=2, rel_heights = c(2,1))
   save_plot(paste0(figdir, "figS3.pdf"), fig, nrow = 2, ncol=1, base_height = 5, base_width=fig.width)
@@ -1002,9 +1073,11 @@ if(file.exists(circos.cmd)){
 
 
 ##############################################################################
-# Figure S5
+# Figure S4
 # HLA silencing in CIS and TCGA (plots of GXN vs methylation)
 ##############################################################################
+message("Plotting Figure S4")
+
 gmcors.tcga <- data.frame(
   gene = gene.lists$all.immune,
   r2 = NA,
@@ -1078,9 +1151,11 @@ save_plot(paste0(figdir, "figS4.pdf"), fig, nrow = 3, ncol=2, base_width = fig.w
 # save_plot(paste0(figdir, "figXb.pdf"), fig, nrow = 3, ncol=2, base_width = 9)
 
 ##############################################################################
-# Figure S5b...
+# Figure S5
 # Methylation patterns over above genes
 ##############################################################################
+message("Plotting Figure S5")
+
 fig <- plot_grid(
   plotMethylForGene("HLA-A") + guides(color=F), 
   plotMethylForGene("HLA-B") + guides(color=F), 
@@ -1088,14 +1163,16 @@ fig <- plot_grid(
   plotMethylForGene("TAP1") + guides(color=F), 
   plotMethylForGene("B2M") + guides(color=F), 
   plotMethylForGene("TNFSF9") + guides(color=F), 
-  nrow=2
+  nrow=3
 )
-save_plot(paste0(figdir, "figS5.pdf"), fig, nrow = 2, ncol=3, base_width = 2*fig.width/3)
+save_plot(paste0(figdir, "figS5.pdf"), fig, nrow = 3, ncol=2, base_width = fig.width/2)
 
 ##############################################################################
 # Figure S6
 # LOHHLA vs HLA methylation (a-c) and example methyltransferase CN/GXN correlations (d-f)
 ##############################################################################
+message("Plotting Figure S6")
+
 # Plotting LOHHLA vs methylation value
 x <- gm.tcga.pheno
 x$lohhla <- NA
@@ -1115,24 +1192,47 @@ x$m.hla.assoc.genes <- apply(
 
 # How about individual HLAs?
 sel <- which(!is.na(x$ubiq.HLA.A.loss))
+p <- tibble(
+  .y. = 'm.hla.a',
+  group1 = 'TRUE',
+  group2 = 'FALSE',
+  p=signif(wilcox.test(x[sel,]$m.hla.a ~ x[sel,]$ubiq.HLA.A.loss)$p.value, 2),
+  y.position = max(x[sel,]$m.hla.a) + max(x[sel,]$m.hla.a)/10
+)
 fig.a <- ggplot(x[sel,], aes(x=ubiq.HLA.A.loss, y=m.hla.a)) +
   geom_boxplot() +
   geom_point() +
-  geom_signif(comparisons = list(c("TRUE","FALSE"))) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
   xlab("HLA-A LOH") +
   ylab("HLA-A mean beta value")
 
+p <- tibble(
+  .y. = 'm.hla.b',
+  group1 = 'TRUE',
+  group2 = 'FALSE',
+  p=signif(wilcox.test(x[sel,]$m.hla.b ~ x[sel,]$ubiq.HLA.B.loss)$p.value, 2),
+  y.position = max(x[sel,]$m.hla.b) + max(x[sel,]$m.hla.b)/10
+)
 fig.b <- ggplot(x[sel,], aes(x=ubiq.HLA.B.loss, y=m.hla.b)) +
   geom_boxplot() +
   geom_point() +
-  geom_signif(comparisons = list(c("TRUE","FALSE"))) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
+  # geom_signif(comparisons = list(c("TRUE","FALSE"))) +
   xlab("HLA-B LOH") +
   ylab("HLA-B mean beta value")
 
+p <- tibble(
+  .y. = 'm.hla.c',
+  group1 = 'TRUE',
+  group2 = 'FALSE',
+  p=signif(wilcox.test(x[sel,]$m.hla.c ~ x[sel,]$ubiq.HLA.C.loss)$p.value, 2),
+  y.position = max(x[sel,]$m.hla.c) + max(x[sel,]$m.hla.c)/10
+)
 fig.c <- ggplot(x[sel,], aes(x=ubiq.HLA.C.loss, y=m.hla.c)) +
   geom_boxplot() +
   geom_point() +
-  geom_signif(comparisons = list(c("TRUE","FALSE"))) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
+  # geom_signif(comparisons = list(c("TRUE","FALSE"))) +
   xlab("HLA-C LOH") +
   ylab("HLA-C mean beta value")
 
@@ -1195,13 +1295,15 @@ fig <- plot_grid(
     mtcor.plots[[1]], mtcor.plots[[3]], mtcor.plots[[5]], 
     labels=c('a','b','c','d','e','f'), nrow=2
   )
-save_plot(paste0(figdir, "figS6.pdf"), fig, nrow = 2, ncol=3, base_width = fig.width/3, base_height = fig.width/2.2)
+save_plot(paste0(figdir, "figS6.pdf"), fig, nrow = 2, ncol=3, base_width = fig.width/3, base_height = fig.width/2)
 
 
 ##############################################################################
 # Figure S7
 # Boxplots of immune checkpoints with CIS tissue
 ##############################################################################
+message("Plotting Figure S7")
+
 l <- lapply(gene.lists$checkpoints, function(gene) {
   # if(gene %in% rownames(gdata)) {
   #   return(data.frame(gene=gene, val=as.numeric(gdata[gene,]), Outcome=gpheno$Outcone, index=1:dim(gdata)[2]))
@@ -1213,25 +1315,37 @@ l <- lapply(gene.lists$checkpoints, function(gene) {
 })
 plotdata <- do.call('rbind', l)
 
-fig <- ggplot(plotdata, aes(x=index, y=val, color=Outcome)) + 
+fig.main <- ggplot(plotdata, aes(x=index, y=val, color=Outcome)) + 
   geom_point() +
-  theme(axis.text = element_blank(), axis.title = element_blank()) +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
   facet_wrap(~gene, scales = 'free') +
-  guides(color=FALSE)
+  ylab('Gene expression') +
+  guides(color=FALSE) 
 
-save_plot(paste0(figdir, "figS7.pdf"), fig, base_width = fig.width)
+# Re-use legend defined in figure 2:
+fig <- plot_grid(fig.main, leg, ncol = 1, rel_heights = c(15,1))
+
+save_plot(paste0(figdir, "figS7.pdf"), fig, base_width = fig.width, base_height = fig.width*0.85)
 
 ##############################################################################
 # Sup. Data 1
 # Table of all lesions and profiling modalities
 ##############################################################################
-pheno.public <- pheno[,c(1,2,3,5,8,10,12,13,15,17,25)]
+message("Plotting Table S1")
+
+pheno.public <- pheno[,c(1,2,3,5,8,10,12,13,17,20,25,28,29,30)]
+# Sort properly by sample number:
+pheno.public$tmp <- str_pad(str_extract(pheno.public$SampleID, "[0-9]+"), width = 3, pad = '0')
+pheno.public <- pheno.public[order(pheno.public$tmp),]
+pheno.public$tmp <- NULL
 WriteXLS('pheno.public', ExcelFileName = paste0(supdir, "TableS1.xlsx"))
 
 ##############################################################################
 # Sup. Data 2
 # Danaher and MethylCIBERSORT decomposition data, with p-values for P vs R
 ##############################################################################
+message("Plotting Table S2")
+
 df1 <- gdata.danaher.t
 df1$patient <- factor(gpheno.pair$Patient.Number)
 df1$Outcome <- gpheno.pair$Outcome
@@ -1282,6 +1396,8 @@ WriteXLS(list(df1, df2), row.names = T,
 # Lists of genes used in this analysis
 # Include general immune genes (used for stroma PvsR comparison) and immunomodulators
 ##############################################################################
+message("Plotting Table S3")
+
 df1 <- data.frame(Gene.Name=sort(gene.lists$all.immune))
 df2 <- data.frame(Gene.Name=sort(gene.lists$hla.assoc))
 df3 <- data.frame(Gene.Name=sort(gene.lists$checkpoints))
@@ -1296,6 +1412,8 @@ WriteXLS(
 # Sup. Data 4
 # Table of all genomic/gxn/methylation changes in immune genes
 ##############################################################################
+message("Plotting Table S4")
+
 # Summary of GXN and meth:
 gs <- data.frame(t(gdata.zs.v[gene.lists$hla.assoc[which(gene.lists$hla.assoc %in% rownames(gdata.zs.v))], match(pheno$SampleID, colnames(gdata.zs.v))]))
 rownames(gs) <- pheno$SampleID
@@ -1328,6 +1446,8 @@ WriteXLS(list(pheno.public, gs, ms, geno.sum, mhc.muts), row.names = T,
 # Additional Calculations
 # These are quoted in the main text, though not used in figures.
 ##############################################################################
+message("Performing additional calculations")
+
 # Differential analysis between Prog/Reg limited to checkpoints
 uvv <- limmaCompare(gdata.v[intersect(gene.lists$checkpoints, rownames(gdata.v)),], gpheno.v, fdr_limit = 1)
 sel <- which(uvv$fdr < 0.05)
