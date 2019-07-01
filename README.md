@@ -1,4 +1,4 @@
-# Immune surveilance in early lung carcinogenesis
+# Delineating mechanisms of immune evasion in lung carcinoma in-situ
 
 This repository provides code used to generate figures and results quoted in "Delineating mechanisms of immune evasion in lung carcinoma in-situ" by Pennycuick et al. It is shared to assist researchers who wish to replicate our results or apply our analyses to their own datasets. Due to the complexity of pre-processing steps it is not intended to be a simple 'one-click' analysis, rather it is provided as a reference to provide full transparency for the reader to understand our analyses.
 
