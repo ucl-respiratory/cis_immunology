@@ -1,16 +1,16 @@
 # Immune surveilance in early lung carcinogenesis
 
-This repository provides code used to generate figures and results quoted in "Immune surveillance in early lung carcinogenesis" by Pennycuick et al. (under review). It is shared to assist researchers who wish to replicate our results or apply our analyses to their own datasets. Due to the complexity of pre-processing steps it is not intended to be a simple 'one-click' analysis, rather it is provided as a reference to provide full transparency for the reader to understand our analyses.
+This repository provides code used to generate figures and results quoted in "Delineating mechanisms of immune evasion in lung carcinoma in-situ" by Pennycuick et al. It is shared to assist researchers who wish to replicate our results or apply our analyses to their own datasets. Due to the complexity of pre-processing steps it is not intended to be a simple 'one-click' analysis, rather it is provided as a reference to provide full transparency for the reader to understand our analyses.
 
 ## Data
 
 To run the code in this repository you will need to download raw data. This is shared in the following repositories:
 
 * CIS gene expression data: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE108124
-* Matched stromal expression data: TBC
+* Matched stromal expression data: Submitted to GEO, awaiting accession number
 * Methylation data: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE108124
 * Whole genome sequencing data: https://www.ebi.ac.uk/ega/datasets/EGAD00001003883
-* IHC and imaging data: TBC
+* IHC and imaging data: raw data not publicly available
 
 The file load.data.R in this repository parses these raw data into the format required by the main analysis function, plot.figures.R. However, due to computational requirements and limitations in sharing potentially identifiable genomic data, we are not able to share full pipelines to do this. Full replication of this analysis does therefore require bioinformatic expertise to pre-process the above raw data.
 
