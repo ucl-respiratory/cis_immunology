@@ -1,6 +1,6 @@
 # Create all figures and supplementary data for this paper.
 
-version <- "0.11"
+version <- "1.1"
 
 # Output directory
 figdir <- paste0("~/Dropbox/CIS_Immunology/cis_immunology2/results/v", version, "/figures/")
@@ -33,6 +33,14 @@ fig.maxheight <- 9.72
 
 # Format figures in 12 point Times New Roman (suggested by Nature formatting guide)
 theme_set(theme_cowplot(font_size=11, font_family = "Times"))
+
+# Set default colour palette - for consistency, redefine the ggplot function as follows:
+# Use Dark2 from Rcolorbrewer, which is colourblind safe
+pal <- 'Set2'
+ggplot <- function(...) ggplot2::ggplot(...) + scale_color_brewer(palette=pal, direction = -1) + scale_fill_brewer(palette = pal, direction = -1)
+# Define manual colours for progressive, regressive, control in that order (used in a couple of plots)
+library(RColorBrewer)
+plotcols <- brewer.pal(3, pal)[c(2,1,3)]
 
 ###############################################################################################
 # Load data
@@ -302,12 +310,14 @@ save_plot(paste0(figdir, "fig1.pdf"), fig, nrow = 2, ncol=1, base_width = fig.wi
 # Cluster based on Danaher data and methylCIBERSORT
 ##############################################################################
 message("Plotting Figure 2")
+
+annot.colors <- list(outcome = c('Progression' = plotcols[1], 'Regression' = plotcols[2], 'Progressive' = plotcols[1], 'Regressive' = plotcols[2]))
 # Clustering on affy gxn immune genes:
 annot.gxn <- data.frame(outcome = factor(gpheno.v$Outcone, levels=c('Regression', 'Progression')), row.names = gpheno.v$sampleID)
 # pheatmap(gdata.v[intersect(gene.lists$all.immune, rownames(gdata.v)),], annotation_col = annot.gxn, scale='row', show_rownames = F, show_colnames = F, cutree_cols = 2)
 
 # Similar using deconvoluted Danaher values:
-fig.a <- pheatmap(t(gdata.danaher.t[,-c(2,15,16)]), annotation_col = annot.gxn, scale='row', show_colnames = F, legend = F, annotation_legend = F, cutree_cols = 2, treeheight_row = 0)
+fig.a <- pheatmap(t(gdata.danaher.t[,-c(2,15,16)]), annotation_col = annot.gxn, scale='row', show_colnames = F, legend = F, annotation_legend = F, cutree_cols = 2, treeheight_row = 0, annotation_colors = annot.colors)
 
 # Similar using methylCIBERSORT
 # Exclude Controls - these won't have TILs as they are brushings
@@ -318,7 +328,7 @@ plotdata <- t(methCS[sel, 1:11])
 rownames(plotdata)[which(rownames(plotdata) == 'Eos')] <- 'Eosinophils'
 rownames(plotdata)[which(rownames(plotdata) == 'CD4_Eff')] <- 'CD4'
 rownames(plotdata)[which(rownames(plotdata) == 'Neu')] <- 'Neutrophils'
-fig.b <- pheatmap(plotdata, annotation_col = annot.meth, show_colnames = F, legend = F, cutree_cols = 2, annotation_legend = F, treeheight_row = 0)
+fig.b <- pheatmap(plotdata, annotation_col = annot.meth, show_colnames = F, legend = F, cutree_cols = 2, annotation_legend = F, treeheight_row = 0, annotation_colors = annot.colors)
 
 # This shows a cluster with lots of cancer i.e. low immune infiltration
 
@@ -543,12 +553,18 @@ write(paste0("Genomic Aberrations in HLA genes were more common in progressive s
 # Add some additional comparisons:
 # HLA-A GXN changes:
 plotdata <- data.frame(
-  hla.a <- as.numeric(gdata.v["HLA-A",]),
-  Outcome <- gsub('ression', '.', gpheno.v$Outcone),
-  patient <- factor(gpheno.v$Patient)
+  hla.a = as.numeric(gdata.v["HLA-A",]),
+  hla.b = as.numeric(gdata.v["HLA-B",]),
+  hla.c = as.numeric(gdata.v["HLA-C",]),
+  Outcome = gsub('ression', '.', gpheno.v$Outcone),
+  patient = factor(gpheno.v$Patient)
 )
 p <- compare.fn(hla.a ~ Outcome + (1 | patient), data = plotdata)
 write(paste0("Expression of HLA-A was correspondingly reduced in progressive compared to regressive samples (p=", p$p, ")"), file = opfile, append = T)
+p <- compare.fn(hla.b ~ Outcome + (1 | patient), data = plotdata)
+write(paste0("Expression of HLA-B was correspondingly reduced in progressive compared to regressive samples (p=", p$p, ")"), file = opfile, append = T)
+p <- compare.fn(hla.c ~ Outcome + (1 | patient), data = plotdata)
+write(paste0("Expression of HLA-C was correspondingly reduced in progressive compared to regressive samples (p=", p$p, ")"), file = opfile, append = T)
 
 ##############################################################################
 # Figure 4: TIL plots PvsR; TIL gradient vs FTGFB; IHC + hotspot analysis
@@ -711,16 +727,139 @@ df$SampleID <- factor(as.character(df$SampleID), levels=unique(as.character(df$S
 
 fig <- ggplot(df[which(df$outcome %in% c("Progression", "Regression")),], aes(x=mod, y=SampleID, fill=val)) +
   geom_tile(aes(width = 0.8, height = 0.8), size=2) +
-  scale_fill_manual(values=c('#F45E5A', '#18B3B7')) +
+  scale_fill_manual(values=plotcols[c(1,2)]) +
   theme(axis.title.x = element_blank(), axis.text.y = element_blank(), axis.ticks = element_blank(), legend.title = element_blank()) +
   ylab("Sample")
 
 save_plot(paste0(figdir, "figS1.pdf"), fig, base_width = fig.width)
 
 
-
 ##############################################################################
 # Figure S2
+# Pro-anti inflammatory cytokines
+##############################################################################
+message("Plotting Figure S2")
+
+# Let's look at the geometric mean of proinflammatory vs anti-inflammatory cytokines
+geomean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+x <- gpheno.pair
+x$pro.mean.t <- apply(gdata.pair.t[intersect(rownames(gdata.pair.t), gene.lists$cytokines.pro),], 2, geomean)
+x$anti.mean.t <- apply(gdata.pair.t[intersect(rownames(gdata.pair.t), gene.lists$cytokines.anti),], 2, geomean)
+
+x$pro.mean.s <- apply(gdata.pair.s[intersect(rownames(gdata.pair.s), gene.lists$cytokines.pro),], 2, geomean)
+x$anti.mean.s <- apply(gdata.pair.s[intersect(rownames(gdata.pair.s), gene.lists$cytokines.anti),], 2, geomean)
+
+library(ggplot2)
+library(ggsignif)
+library(cowplot)
+x$Outcome <- gsub('ression', '.', x$Outcome)
+p <- compare.fn(pro.mean.t ~ Outcome + (1 | Patient.Number), data = x)
+f1 <- ggplot(x, aes(x=Outcome, y=pro.mean.t)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  guides(fill=F) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  ylab("Pro-inflammatory cytokines (tissue)") +
+  theme(axis.title.x = element_blank())
+
+p <- compare.fn(anti.mean.t ~ Outcome + (1 | Patient.Number), data = x)
+f2 <- ggplot(x, aes(x=Outcome, y=anti.mean.t)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  guides(fill=F) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  ylab("Anti-inflammatory cytokines (tissue)") +
+  theme(axis.title.x = element_blank())
+
+p <- compare.fn(pro.mean.t / anti.mean.t ~ Outcome + (1 | Patient.Number), data = x)
+f3 <- ggplot(x, aes(x=Outcome, y=pro.mean.t / anti.mean.t)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  guides(fill=F) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  ylab("Pro:Anti ratio (CIS)") +
+  theme(axis.title.x = element_blank())
+# Evidence of proinflammatory phenotype in regression
+
+# Demonstrate it's not the case in stroma:
+p <- compare.fn(pro.mean.s ~ Outcome + (1 | Patient.Number), data = x)
+f4 <- ggplot(x, aes(x=Outcome, y=pro.mean.s)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  guides(fill=F) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  ylab("Pro-inflammatory cytokines (stroma)") +
+  theme(axis.title.x = element_blank())
+
+p <- compare.fn(anti.mean.s ~ Outcome + (1 | Patient.Number), data = x)
+f5 <- ggplot(x, aes(x=Outcome, y=anti.mean.s)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  guides(fill=F) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  ylab("Anti-inflammatory cytokines (stroma)") +
+  theme(axis.title.x = element_blank())
+p <- compare.fn(pro.mean.s / anti.mean.s ~ Outcome + (1 | Patient.Number), data = x)
+f6 <- ggplot(x, aes(x=Outcome, y=pro.mean.s / anti.mean.s)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  guides(fill=F) +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  ylab("Pro:Anti ratio (Stroma)") +
+  theme(axis.title.x = element_blank())
+
+fig <- plot_grid(f1, f2, f3, f4, f5, f6, ncol=3, labels=c('a','b','c','d','e','f'))
+
+save_plot(paste0(figdir, "figS2.pdf"), fig, base_width = fig.width, base_height = fig.width)
+
+# Print also the p-value for CXCL8:
+x$cxcl8 <- as.numeric(gdata.pair.t["CXCL8",])
+p <- compare.fn(cxcl8 ~ Outcome + (1 | Patient.Number), data = x)
+write(paste0("p-value for CXCL8 (uncorrected): ", p$p), file = opfile, append = T)
+
+##############################################################################
+# Figure S3
+# Pro-anti inflammatory cytokines (individual plots)
+##############################################################################
+message("Plotting Figure S3")
+
+# Plot the individual cytokines as separate boxplots:
+plotdata <- lapply(intersect(rownames(gdata.pair.t), c(gene.lists$cytokines.anti, gene.lists$cytokines.pro)), function(x) {
+  data.frame(
+    gene=x,
+    is.pro = x %in% gene.lists$cytokines.pro,
+    val = as.numeric(gdata.pair.t[x,]),
+    sampleID = gpheno.pair$SampleID,
+    Outcome = gpheno.pair$Outcome
+  )
+})
+plotdata <- do.call('rbind', plotdata)
+plotdata$Outcome <- gsub('ression', '.', plotdata$Outcome)
+scaleFUN <- function(x) sprintf("%.1f", x)
+pro <- ggplot(plotdata[which(plotdata$is.pro),], aes(x=Outcome, y=val)) +
+  geom_boxplot(aes(fill=Outcome)) + geom_point()  +
+  geom_signif(comparisons = list(c('Prog.', 'Reg.')), map_signif_level = T, vjust = 1.5) +
+  guides(fill=F) +
+  facet_wrap(~gene, scales = 'free_y') +
+  theme(axis.title.x = element_blank()) +
+  ylab("CIS gene expression values for pro-inflammatory cytokines") +
+  scale_y_continuous(labels=scaleFUN)
+anti <- ggplot(plotdata[which(!plotdata$is.pro),], aes(x=Outcome, y=val)) +
+  geom_boxplot(aes(fill=Outcome)) + geom_point()  +
+  geom_signif(comparisons = list(c('Prog.', 'Reg.')), map_signif_level = T, vjust = 1.5) +
+  facet_wrap(~gene, scales = 'free_y') + guides(fill=F) +
+  theme(axis.title.x = element_blank()) +
+  ylab("CIS gene expression values for anti-inflammatory cytokines") +
+  scale_y_continuous(labels=scaleFUN)
+fig <- plot_grid(pro, anti, ncol = 2, labels=c('a','b'))
+
+save_plot(paste0(figdir, "figS3.pdf"), fig, base_width = fig.width*1.2, base_height = fig.width)
+
+##############################################################################
+# Figure S4
 # Neoantigen plots:
 #  a) Predicted neoantigens vs mutational burden
 #  b) Clonal neoantigens P vs R
@@ -730,7 +869,7 @@ save_plot(paste0(figdir, "figS1.pdf"), fig, base_width = fig.width)
 #  f) Rank P vs R
 #  g) Depletion stats P vs R
 ##############################################################################
-message("Plotting Figure S2")
+message("Plotting Figure S4")
 
 c <- cor.test(pheno$neoants.strong, pheno$burden)
 r2 <- paste0("r2=", signif(c$estimate, 2), "; p=", signif(c$p.value,2))
@@ -831,22 +970,20 @@ fig.h <- ggplot(plotdata, aes(x=Outcome, y=depletion.stat)) +
   # geom_signif(comparisons = list(c("Progression", "Regression"))) +
   geom_point() +
   guides(fill=F) +
-  ylab("Depletion Stat") +
+  ylab("Depletion Score") +
   theme(axis.title.x = element_blank())
 
 
 fig <- plot_grid(fig.a, fig.b, fig.c, fig.d, fig.e, fig.f, fig.g, fig.h, nrow=3, ncol=3, 
                  labels = c('a', 'b','c','d','e','f','g','h'))
 
-save_plot(paste0(figdir, "figS2.pdf"), fig, ncol=3, nrow=3, base_width = fig.width/3, base_height = fig.width/2.5)
-
-
+save_plot(paste0(figdir, "figS4.pdf"), fig, ncol=3, nrow=3, base_width = fig.width/3, base_height = fig.width/2.5)
 
 ##############################################################################
-# Figure S3
+# Figure S5
 # Methylation DMRs across the genome
 ##############################################################################
-message("Plotting Figure S3")
+message("Plotting Figure S5")
 
 # Plot DMRs as a circos plot.
 # Skip this plot if the user does not have circos installed.
@@ -1062,10 +1199,11 @@ if(file.exists(circos.cmd)){
     guides(color=FALSE) +
     theme(axis.title.x = element_blank(), axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
     facet_wrap(~probe) +
-    ylab("Methylation beta value")
+    ylab("Methylation beta value") +
+    scale_color_manual(values = plotcols)
   
   fig <- plot_grid(fig.a, fig.b, labels=c('a','b'), ncol=1, nrow=2, rel_heights = c(2,1))
-  save_plot(paste0(figdir, "figS3.pdf"), fig, nrow = 2, ncol=1, base_height = 5, base_width=fig.width)
+  save_plot(paste0(figdir, "figS5.pdf"), fig, nrow = 2, ncol=1, base_height = 5, base_width=fig.width)
   file.remove(paste0(figdir, "circos.tmp.svg"))
 } else {
   message("Warning: circos installation not found. Figure S4 will not be plotted.")
@@ -1073,10 +1211,10 @@ if(file.exists(circos.cmd)){
 
 
 ##############################################################################
-# Figure S4
+# Figure S6
 # HLA silencing in CIS and TCGA (plots of GXN vs methylation)
 ##############################################################################
-message("Plotting Figure S4")
+message("Plotting Figure S6")
 
 gmcors.tcga <- data.frame(
   gene = gene.lists$all.immune,
@@ -1140,7 +1278,7 @@ fig <- plot_grid(
   nrow=3,
   labels = c("a", "b", "c", "d", "e", "f", "g", "h", "i") #, "j", "k", "l")
 )
-save_plot(paste0(figdir, "figS4.pdf"), fig, nrow = 3, ncol=2, base_width = fig.width/2, base_height = fig.width/2.5)
+save_plot(paste0(figdir, "figS6.pdf"), fig, nrow = 3, ncol=2, base_width = fig.width/2, base_height = fig.width/2.5)
 
 # fig <- plot_grid(
 #   cis.plots[["HLA-A"]], cis.plots[["HLA-B"]], cis.plots[["HLA-C"]],
@@ -1151,155 +1289,86 @@ save_plot(paste0(figdir, "figS4.pdf"), fig, nrow = 3, ncol=2, base_width = fig.w
 # save_plot(paste0(figdir, "figXb.pdf"), fig, nrow = 3, ncol=2, base_width = 9)
 
 ##############################################################################
-# Figure S5
+# Figure S7
 # Methylation patterns over above genes
 ##############################################################################
-message("Plotting Figure S5")
+message("Plotting Figure S7")
 
 fig <- plot_grid(
-  plotMethylForGene("HLA-A") + guides(color=F), 
-  plotMethylForGene("HLA-B") + guides(color=F), 
-  plotMethylForGene("HLA-C") + guides(color=F), 
-  plotMethylForGene("TAP1") + guides(color=F), 
-  plotMethylForGene("B2M") + guides(color=F), 
-  plotMethylForGene("TNFSF9") + guides(color=F), 
+  plotMethylForGene("HLA-A") + guides(color=F) + scale_color_manual(values = plotcols), 
+  plotMethylForGene("HLA-B") + guides(color=F) + scale_color_manual(values = plotcols), 
+  plotMethylForGene("HLA-C") + guides(color=F) + scale_color_manual(values = plotcols), 
+  plotMethylForGene("TAP1") + guides(color=F) + scale_color_manual(values = plotcols), 
+  plotMethylForGene("B2M") + guides(color=F) + scale_color_manual(values = plotcols), 
+  plotMethylForGene("TNFSF9") + guides(color=F) + scale_color_manual(values = plotcols), 
   nrow=3
 )
-save_plot(paste0(figdir, "figS5.pdf"), fig, nrow = 3, ncol=2, base_width = fig.width/2)
-
-##############################################################################
-# Figure S6
-# LOHHLA vs HLA methylation (a-c) and example methyltransferase CN/GXN correlations (d-f)
-##############################################################################
-message("Plotting Figure S6")
-
-# Plotting LOHHLA vs methylation value
-x <- gm.tcga.pheno
-x$lohhla <- NA
-sel <- which(!is.na(x$loss.cat))
-x$lohhla[sel] <- x$loss.cat[sel] %in% c('any', 'ubiq')
-x$m.hla.a <- as.numeric(gm.tcga.mdata.genes["HLA-A", x$mname])
-x$m.hla.b <- as.numeric(gm.tcga.mdata.genes["HLA-B", x$mname])
-x$m.hla.c <- as.numeric(gm.tcga.mdata.genes["HLA-C", x$mname])
-x$m.hla.genes <- apply(
-  gm.tcga.mdata.genes[intersect(gene.lists$hla.assoc, c("HLA-A", "HLA-B", "HLA-C")), x$mname],
-  2, max
-)
-x$m.hla.assoc.genes <- apply(
-  gm.tcga.mdata.genes[intersect(gene.lists$hla.assoc, rownames(gm.tcga.mdata.genes)), x$mname],
-  2, mean
-)
-
-# How about individual HLAs?
-sel <- which(!is.na(x$ubiq.HLA.A.loss))
-p <- tibble(
-  .y. = 'm.hla.a',
-  group1 = 'TRUE',
-  group2 = 'FALSE',
-  p=signif(wilcox.test(x[sel,]$m.hla.a ~ x[sel,]$ubiq.HLA.A.loss)$p.value, 2),
-  y.position = max(x[sel,]$m.hla.a) + max(x[sel,]$m.hla.a)/10
-)
-fig.a <- ggplot(x[sel,], aes(x=ubiq.HLA.A.loss, y=m.hla.a)) +
-  geom_boxplot() +
-  geom_point() +
-  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
-  xlab("HLA-A LOH") +
-  ylab("HLA-A mean beta value")
-
-p <- tibble(
-  .y. = 'm.hla.b',
-  group1 = 'TRUE',
-  group2 = 'FALSE',
-  p=signif(wilcox.test(x[sel,]$m.hla.b ~ x[sel,]$ubiq.HLA.B.loss)$p.value, 2),
-  y.position = max(x[sel,]$m.hla.b) + max(x[sel,]$m.hla.b)/10
-)
-fig.b <- ggplot(x[sel,], aes(x=ubiq.HLA.B.loss, y=m.hla.b)) +
-  geom_boxplot() +
-  geom_point() +
-  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
-  # geom_signif(comparisons = list(c("TRUE","FALSE"))) +
-  xlab("HLA-B LOH") +
-  ylab("HLA-B mean beta value")
-
-p <- tibble(
-  .y. = 'm.hla.c',
-  group1 = 'TRUE',
-  group2 = 'FALSE',
-  p=signif(wilcox.test(x[sel,]$m.hla.c ~ x[sel,]$ubiq.HLA.C.loss)$p.value, 2),
-  y.position = max(x[sel,]$m.hla.c) + max(x[sel,]$m.hla.c)/10
-)
-fig.c <- ggplot(x[sel,], aes(x=ubiq.HLA.C.loss, y=m.hla.c)) +
-  geom_boxplot() +
-  geom_point() +
-  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01) +
-  # geom_signif(comparisons = list(c("TRUE","FALSE"))) +
-  xlab("HLA-C LOH") +
-  ylab("HLA-C mean beta value")
-
-# Correlate methyltransferase CNs with HLA-A/B/C beta values
-sel <- which(gm.tcga.pheno$PatientBarcode %in% colnames(tcga.cn.table))
-mts <- intersect(gene.lists$methyltransferases, rownames(tcga.cn.table))
-methcor <- foreach(gene = mts, .combine = rbind) %do% {
-  c = cor.test(
-    as.numeric(tcga.cn.table[gene, gm.tcga.pheno$PatientBarcode[sel]]),
-    as.numeric(gm.tcga.mdata.genes["HLA-A",gm.tcga.pheno$mname[sel]])
-  )
-  df <- data.frame(
-    gene = gene,
-    r2 = c$estimate,
-    p = c$p.value
-  )
-  return(df)
-}
-methcor$p.adj <- p.adjust(methcor$p)
-# Annotate with genomic locations
-mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
-bm <- getBM(attributes = c("hgnc_symbol", "chromosome_name", "band"),
-            filters    = "hgnc_symbol",
-            values     = methcor$gene, 
-            mart       = mart)
-bm <- bm[which(bm$chromosome_name %in% 1:23),]
-methcor <- merge(methcor, bm, by.x='gene', by.y='hgnc_symbol', all.x=T)
-methcor <- methcor[order(methcor$p),]
-
-mtcor.plots <- lapply(1:6, function(i) {
-  gene <- as.character(methcor$gene[i])
-  plotdata <- data.frame(
-    cn = as.numeric(tcga.cn.table[gene, gm.tcga.pheno$PatientBarcode[sel]]),
-    beta = as.numeric(gm.tcga.mdata.genes["HLA-A",gm.tcga.pheno$mname[sel]])
-  )
-  f <- ggplot(plotdata, aes(x=cn, y=beta)) +
-    geom_point(color='orange', size=0.3) +
-    geom_smooth(method='lm') +
-    stat_cor() +
-    ggtitle(gene) +
-    xlab('Local copy number') +
-    ylab('HLA-A beta value')
-  return(f)
-})
-
-# Alternative figure f: correlation of image lymphocyte gradient with global methylation.
-# plotdata <- pheno[which(pheno$Methylation & pheno$HandE),]
-# # plotdata$hla.a.meth <- as.numeric(mdata.genes.nosnp["HLA-A",plotdata$SampleID])
-# plotdata$Outcome <- factor(as.character(plotdata$Outcome), levels=c("Progression", "Regression", "Control"))
-# fig.f <- ggplot(plotdata, aes(x=total.meth.nosnp, y=lym_grad)) +
-#   geom_point(aes(color=Outcome)) +
-#   geom_smooth(method='lm') +
-#   stat_cor() + 
-#   guides(color=F) +
-#   xlab('Global methylation') +
-#   ylab('Lymphocyte gradient')
-
-fig <- plot_grid(
-    fig.a, fig.b, fig.c, 
-    mtcor.plots[[1]], mtcor.plots[[3]], mtcor.plots[[5]], 
-    labels=c('a','b','c','d','e','f'), nrow=2
-  )
-save_plot(paste0(figdir, "figS6.pdf"), fig, nrow = 2, ncol=3, base_width = fig.width/3, base_height = fig.width/2)
+save_plot(paste0(figdir, "figS7.pdf"), fig, nrow = 3, ncol=2, base_width = fig.width/2)
 
 
 ##############################################################################
-# Figure S7
+# Figure S8
+# Cytokine:receptor analysis
+##############################################################################
+message("Plotting Figure S8")
+
+ck.ratio <- gdata.pair.t[gene.lists$chemokines$name,] / gdata.pair.t[gene.lists$chemokines$receptor,]
+rownames(ck.ratio) <- paste(gene.lists$chemokines$name, gene.lists$chemokines$receptor, sep=".")
+ck.ratio.diff <- limmaCompare(ck.ratio, gpheno.pair, fdr_limit = 0.05)
+
+write(paste0("PvR Limma analysis for chemokine:receptor pairs: sig pairs ", paste(paste(rownames(ck.ratio.diff), "FC:", ck.ratio.diff$fc, "FDR:", ck.ratio.diff$fdr, sep=','), sep = '; ')), file = opfile, append = T)
+
+# We see an interesting signal in CCL27:CCR10 - increased signalling relevant in melanoma through AKT/PI3K signalling
+# (Ref https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926818/)
+plotdata <- gpheno.pair
+plotdata$ccl27.ccr10 <- as.numeric(ck.ratio["CCL27.CCR10",])
+plotdata$ccl27 <- as.numeric(gdata.pair.t["CCL27",])
+plotdata$ccr10 <- as.numeric(gdata.pair.t["CCR10",])
+plotdata$Outcome <- gsub('ression', '.', plotdata$Outcome)
+p <- compare.fn(ccl27.ccr10 ~ Outcome + (1 | Patient.Number), data = plotdata)
+f1 <- ggplot(plotdata, aes(x=Outcome, y=ccl27.ccr10)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  ylab("CCL27:CCR10 ratio") +
+  guides(fill=F) +
+  theme(axis.title.x = element_blank())
+
+p <- compare.fn(ccl27 ~ Outcome + (1 | Patient.Number), data = plotdata)
+f2 <- ggplot(plotdata, aes(x=Outcome, y=ccl27)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  guides(fill=F) +
+  ylab('CCL27 expression') +
+  theme(axis.title.x = element_blank())
+
+p <- compare.fn(ccr10 ~ Outcome + (1 | Patient.Number), data = plotdata)
+f3 <- ggplot(plotdata, aes(x=Outcome, y=ccr10)) +
+  geom_boxplot(aes(fill=Outcome)) +
+  geom_point() +
+  stat_pvalue_manual(p, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3) +
+  guides(fill=F) +
+  ylab('CCR10 expression') +
+  theme(axis.title.x = element_blank())
+
+# This is supposed to act through PIK3CA/AKT - any correlation?
+plotdata$pik3ca <- as.numeric(gdata.pair.t["PIK3CA",])
+f4 <- ggplot(plotdata, aes(x=ccl27, y=pik3ca)) +
+  geom_point() + geom_smooth(method='lm') + stat_cor() +
+  ylab('PIK3CA expression') +
+  xlab('CCL27 expression')
+plotdata$akt1 <- as.numeric(gdata.pair.t["AKT1",])
+f5 <- ggplot(plotdata, aes(x=ccl27, y=akt1)) +
+  geom_point() + geom_smooth(method='lm') + stat_cor() +
+  ylab('AKT1 expression')+
+  xlab('CCL27 expression')
+
+fig <- plot_grid(f1,f2,f3,f4,f5, ncol = 3, labels = c('a','b','c','d','e'))
+save_plot(paste0(figdir, "figS8.pdf"), fig, base_width = fig.width, base_height = fig.width)
+
+##############################################################################
+# Figure S9
 # Boxplots of immune checkpoints with CIS tissue
 ##############################################################################
 message("Plotting Figure S7")
@@ -1325,7 +1394,7 @@ fig.main <- ggplot(plotdata, aes(x=index, y=val, color=Outcome)) +
 # Re-use legend defined in figure 2:
 fig <- plot_grid(fig.main, leg, ncol = 1, rel_heights = c(15,1))
 
-save_plot(paste0(figdir, "figS7.pdf"), fig, base_width = fig.width, base_height = fig.width*0.85)
+save_plot(paste0(figdir, "figS9.pdf"), fig, base_width = fig.width, base_height = fig.width*0.85)
 
 ##############################################################################
 # Sup. Data 1
@@ -1401,11 +1470,15 @@ message("Plotting Table S3")
 df1 <- data.frame(Gene.Name=sort(gene.lists$all.immune))
 df2 <- data.frame(Gene.Name=sort(gene.lists$hla.assoc))
 df3 <- data.frame(Gene.Name=sort(gene.lists$checkpoints))
-df4 <- data.frame(Gene.Name=sort(gene.lists$methyltransferases))
+df4 <- rbind(
+  data.frame(Gene.Name=sort(gene.lists$cytokines.pro), Type='Pro-inflammatory'),
+  data.frame(Gene.Name=sort(gene.lists$cytokines.anti), Type='Anti-inflammatory')
+)
+df5 <- gene.lists$chemokines
 WriteXLS(
-  list(df1, df2, df3, df4), 
+  list(df1, df2, df3, df4, df5), 
   ExcelFileName = paste0(supdir, "TableS3.xlsx"), 
-  SheetNames = c('All immune genes', 'Antigen presentation genes', 'Immunomodulators', 'Methyltransferases'), col.names = F
+  SheetNames = c('All immune genes', 'Antigen presentation genes', 'Immunomodulators', 'Inflammatory cytokines', 'Chemokine-receptor pairs'), col.names = F
 )
 
 ##############################################################################
