@@ -1,5 +1,5 @@
 source("utility_functions/vep.annotate.R")
-muts.for.plotting <- function(genes, pheno, do.vep=T){
+muts.for.plotting <- function(genes, pheno, do.vep=T, excluded.muttypes = c('upstream', 'downstream', 'intronic', '3prime_UTR_variant', 'silent')){
   mhc.muts <- muts.all[which(muts.all$gene %in% genes),]
   tmp <- mhc.muts
   tmp$Chromosome <- mhc.muts$chr
@@ -10,28 +10,29 @@ muts.for.plotting <- function(genes, pheno, do.vep=T){
   # Filter out low impact variants
   # This can take ages with lots of genes so allow the user to skip this step
   if(do.vep) {
-    x <- vep.annotate(tmp[which(tmp$class %in% c("SNV", 'DI', 'R')),])
-    mhc.muts$vep.impact <- NA
-    mhc.muts$vep.impact[match(x$mid, mhc.muts$mid)] <- x$vep.impact
-    
-    # Ignore those which are modifier/low impact and those without a prediction
-    mhc.muts.sig <- mhc.muts
-    sel.rm <- which(
-      mhc.muts.sig$vep.impact %in% c("MODIFIER", "LOW", "LOW,MODIFIER") |
-        (is.na(mhc.muts.sig$vep.impact) & as.character(mhc.muts.sig$type) %in% c('upstream', 'downstream', 'intronic', '3prime_UTR_variant', 'silent', 'Gain'))
-    )
-    if(length(sel.rm) > 0) { mhc.muts.sig <- mhc.muts.sig[-sel.rm,] }
+    # x <- vep.annotate(tmp[which(tmp$class %in% c("SNV", 'DI', 'R')),])
+    # mhc.muts$vep.impact <- NA
+    # mhc.muts$vep.impact[match(x$mid, mhc.muts$mid)] <- x$vep.impact
+    # 
+    # # Ignore those which are modifier/low impact and those without a prediction
+    # mhc.muts.sig <- mhc.muts
+    # sel.rm <- which(
+    #   mhc.muts.sig$vep.impact %in% c("MODIFIER", "LOW", "LOW,MODIFIER") |
+    #     (is.na(mhc.muts.sig$vep.impact) & as.character(mhc.muts.sig$type) %in% excluded.muttypes)
+    # )
+    # if(length(sel.rm) > 0) { mhc.muts.sig <- mhc.muts.sig[-sel.rm,] }
+    mhc.muts.sig <- mhc.muts[which(mhc.muts$vep.sig),]
   } else {
     mhc.muts.sig <- mhc.muts
     sel.rm <- which(
-      (is.na(mhc.muts.sig$vep.impact) & as.character(mhc.muts.sig$type) %in% c('upstream', 'downstream', 'intronic', '3prime_UTR_variant', 'silent', 'Gain'))
+      (is.na(mhc.muts.sig$vep.impact) & as.character(mhc.muts.sig$type) %in% c('upstream', 'downstream', 'intronic', '3prime_UTR_variant', 'silent'))
     )
     if(length(sel.rm) > 0) { mhc.muts.sig <- mhc.muts.sig[-sel.rm,] }
   }
   
   # Create a data frame showing the presence of changes
-  hla.changes <- foreach(i=1:dim(pheno)[1], .combine=rbind, .export = c('pheno', 'gdata.zs', 'gdata.zs.v', 'mdata.zs')) %dopar% {
-    print(i)
+  hla.changes <- foreach(i=1:dim(pheno)[1], .combine=rbind, .export = c('pheno', 'gdata.zs', 'gdata.zs.v', 'mdata.zs')) %do% {
+    # print(i)
     df <- data.frame(
       gene <- character(0)
     )
