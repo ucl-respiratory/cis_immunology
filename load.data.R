@@ -101,13 +101,6 @@ x <- pheno
 x$uuid <- str_pad(x$Patient.Number, 3, pad='0')
 x <- merge(x, clinical, by='uuid', all.x=T)
 
-# # Fix date formats
-# for(i in 1:dim(x)[1]) {
-#   if(grepl("[0-9]+/[0-9]+/[0-9]+", x$Biopsy.Date[i])) {
-#     x$Biopsy.Date[i] <- as.character(as.Date(x$Biopsy.Date[i], format = "%d/%m/%Y"))
-#   }
-# }
-
 # Fill in gaps
 sel <- which(is.na(x$Gender) & !is.na(x$Sex))
 x$Gender[sel] <- x$Sex[sel]
@@ -957,17 +950,6 @@ pheno$time.from <- unlist(lapply(as.character(pheno$Biopsy.Date), function(x) {
 pheno$fu.time <- difftime(as.Date(pheno$last.seen, format = "%Y-%m-%d"), pheno$time.from)
 pheno$fu.time <- as.numeric(pheno$fu.time) / (24*365.25) # Convert to years
 
-# Drop regressive samples that later progressed
-# sel <- which(pheno$Outcome == 'Regression' & pheno$cancer.date != '')
-# sel <- which(pheno$exclude.reg)
-# if(length(sel) > 0) {
-#   write(paste0("Dropping ", length(sel), " regressive patients who later progressed (", 100*length(sel) / length(which(pheno$Outcome == 'Regression')), '%)'), file = opfile, append = T)
-#   write(paste0("Of these, median time to progression was ", median(pheno$fu.time[sel]), " years, range ", range(pheno$fu.time[sel])[1] , " - ", range(pheno$fu.time[sel])[2]), file = opfile, append = T)
-#   
-#   # Remaining ones:
-#   sel <- which(pheno$Outcome == 'Regression')
-#   write(paste0("Of the remaining ", length(sel), " regressive samples, median follow up was ", median(pheno$fu.time[sel]), " years, range ", range(pheno$fu.time[sel])[1] , " - ", range(pheno$fu.time[sel])[2]), file = opfile, append = T)
-# }
 
 # Include a pheno data frame with no duplicated patients (e.g. for HLA analysis).
 # Prioritise multi-omic samples.
