@@ -1,6 +1,6 @@
 # Create all figures and supplementary data for this paper.
 
-version <- "4.3"
+version <- "5.0"
 
 # Output directory
 figdir <- paste0("~/Dropbox/CIS_Immunology/cis_immunology2/results/v", version, "/figures/")
@@ -228,7 +228,7 @@ fig.bc <- plot_grid(fig.b, fig.c, labels=c('b','c'))
 
 fig <- plot_grid(fig.a, fig.bc, nrow = 2, labels = c("a", ""))
 
-save_plot(paste0(figdir, "fig1.pdf"), fig, nrow = 2, ncol=1, base_width = fig.width, base_height = 2.9)
+save_plot(paste0(figdir, "fig1.tiff"), fig, nrow = 2, ncol=1, base_width = fig.width, base_height = 2.9)
 
 # Save all comparisons in a text file
 write(paste0("H&E lymphocyte data, n=", length(which(pheno$HandE)), ' (',length(which(pheno$HandE & pheno$Outcome == 'Progression')), 'P / ', length(which(pheno$HandE & pheno$Outcome == 'Regression')), 'R)'), file = opfile, append = T)
@@ -302,7 +302,7 @@ fig.lp <- ann_fun(fig.lp, 6, compare.fn(stroma_cd4_perArea ~ Outcome + (1 | pati
 fig.lp <- ann_fun(fig.lp, 7, compare.fn(stroma_cd8_perArea ~ Outcome + (1 | patient), data=plotdata3)$p, m=0.75)
 fig.lp <- ann_fun(fig.lp, 8, compare.fn(stroma_foxp3_perArea ~ Outcome + (1 | patient), data=plotdata3)$p, m=0.75)
 
-save_plot(paste0(figdir, 'figS11.pdf'), fig.lp, base_width = fig.width)
+save_plot(paste0(figdir, 'figS11.tiff'), fig.lp, base_width = fig.width)
 
 # Calculate the stats - here we need pair-wise comparisons...
 lmm <- lmer(lymphocytes_perArea ~ Outcome + (1 | patient), data=plotdata3, REML = F)
@@ -476,7 +476,7 @@ fig <- plot_grid(
   ncol = 1, rel_heights = c(15,1)
 )
 
-save_plot(paste0(figdir, "fig2.pdf"), fig, nrow = 2, ncol=2, base_width = fig.width/2)
+save_plot(paste0(figdir, "fig2.tiff"), fig, nrow = 2, ncol=2, base_width = fig.width/2)
 
 do.log(c(
   sep, "# Figure 2 legend", sep,
@@ -513,7 +513,7 @@ names(gene.groups) <- as.character(names)
 fig <- plot.muts(gene.lists$somatic.immune.genes$GENES, gene.groups = gene.groups)
 fig
 n = 1.6
-save_plot(paste0(figdir, "fig3.pdf"), fig, base_width = fig.width*n*1.45, base_height = fig.width*n)
+save_plot(paste0(figdir, "fig3.tiff"), fig, base_width = fig.width*n*1.45, base_height = fig.width*n)
 
 
 # Consider also an analysis of Thorson and Wellenstein genes (not included in final paper):
@@ -806,8 +806,8 @@ fig <- plot_grid(
   fig.ab, 
   fig.cd,
   plot_grid(
+    plots.s,
     ggdraw() + draw_image("data/ihc_demo_image.tif") + theme(plot.margin = margin(15,5,15,15)),
-    plots.s, 
     plot.cclccrstain,
     nrow = 1,
     rel_widths = c(2.1, 2.1, 1),
@@ -816,7 +816,7 @@ fig <- plot_grid(
   ncol = 1
 )
 
-save_plot(paste0(figdir, "fig4.pdf"), fig, nrow = 4, ncol=4, base_width = fig.width/4, base_height = fig.width/3)
+save_plot(paste0(figdir, "fig4.tiff"), fig, nrow = 4, ncol=4, base_width = fig.width/4, base_height = fig.width/3)
 
 
 do.log(c(
@@ -873,7 +873,7 @@ fig <- ggplot(df[which(df$outcome %in% c("Progression", "Regression")),], aes(x=
   ylab("Sample")
 fig
 
-save_plot(paste0(figdir, "figS1.pdf"), fig, base_width = fig.width, base_height = fig.maxheight)
+save_plot(paste0(figdir, "figS1.tiff"), fig, base_width = fig.width, base_height = fig.maxheight)
 
 
 ##############################################################################
@@ -952,7 +952,7 @@ f6 <- ggplot(x, aes(x=Outcome, y=pro.mean.s / anti.mean.s)) +
 
 fig <- plot_grid(f1, f2, f3, f4, f5, f6, ncol=3, labels=c('a','b','c','d','e','f'))
 
-save_plot(paste0(figdir, "figS2.pdf"), fig, base_width = fig.width, base_height = fig.width)
+save_plot(paste0(figdir, "figS2.tiff"), fig, base_width = fig.width, base_height = fig.width)
 
 # Print also the p-value for CXCL8:
 x$cxcl8 <- as.numeric(gdata.pair.t["CXCL8",])
@@ -1015,7 +1015,7 @@ fig.b <- plot_grid(
 )
 fig <- plot_grid(fig.a, fig.b, labels = c('a','b'), nrow = 1)
 
-save_plot(paste0(figdir, "figS3.pdf"), fig, base_width = fig.width*1.2, base_height = fig.width)
+save_plot(paste0(figdir, "figS3.tiff"), fig, base_width = fig.width*1.2, base_height = fig.width)
 
 
 ##############################################################################
@@ -1212,7 +1212,7 @@ fig <- plot_grid(
 )
 fig
 
-save_plot(paste0(figdir, "figS4.pdf"), fig, base_width = fig.width, base_height = fig.maxheight)
+save_plot(paste0(figdir, "figS4.tiff"), fig, base_width = fig.width, base_height = fig.maxheight)
 
 do.log(c(
   sep, "# Figure S4 legend", sep,
@@ -1349,7 +1349,7 @@ fig.h <- ggplot(plotdata, aes(x=Outcome, y=depletion.stat)) +
 fig <- plot_grid(fig.a, fig.b, fig.c, fig.d, fig.e, fig.f, fig.g, fig.h, nrow=3, ncol=3, 
                  labels = c('a', 'b','c','d','e','f','g','h'))
 
-save_plot(paste0(figdir, "figS5.pdf"), fig, ncol=3, nrow=3, base_width = fig.width/3, base_height = fig.width/2.5)
+save_plot(paste0(figdir, "figS5.tiff"), fig, ncol=3, nrow=3, base_width = fig.width/3, base_height = fig.width/2.5)
 
 ##############################################################################
 # Figure S6
@@ -1574,7 +1574,7 @@ if(file.exists(circos.cmd)){
     scale_color_manual(values = plotcols)
   
   fig <- plot_grid(fig.a, fig.b, labels=c('a','b'), ncol=1, nrow=2, rel_heights = c(2,1))
-  save_plot(paste0(figdir, "figS6.pdf"), fig, nrow = 2, ncol=1, base_height = 5, base_width=fig.width)
+  save_plot(paste0(figdir, "figS6.tiff"), fig, nrow = 2, ncol=1, base_height = 5, base_width=fig.width)
   file.remove(paste0(figdir, "circos.tmp.svg"))
 } else {
   message("Warning: circos installation not found. Figure S6 will not be plotted.")
@@ -1653,7 +1653,7 @@ fig <- plot_grid(
   labels = c("a", "", "", "", "", "", "", "", "b")
   # labels = c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p")
 )
-save_plot(paste0(figdir, "figS7.pdf"), fig, nrow = 4, ncol=4, base_width = fig.width/2.75, base_height = fig.width/2.75)
+save_plot(paste0(figdir, "figS7.tiff"), fig, nrow = 4, ncol=4, base_width = fig.width/2.75, base_height = fig.width/2.75)
 
 ##############################################################################
 # Figure S8
@@ -1679,7 +1679,7 @@ x <- cowplot::get_legend(x)
 # grid.newpage()
 # y <- grid.draw(x)
 fig <- plot_grid(fig.main, x, ncol=1, rel_heights = c(9.5,0.5))
-save_plot(paste0(figdir, "figS8.pdf"), fig, nrow = 3, ncol=2, base_width = fig.width/2)
+save_plot(paste0(figdir, "figS8.tiff"), fig, nrow = 3, ncol=2, base_width = fig.width/2)
 
 ##############################################################################
 # Figure S9
@@ -1705,7 +1705,7 @@ fig <- ggplot(plotdata, aes(x=index, y=val, color=Outcome)) +
   facet_wrap(~gene, scales = 'free') +
   ylab('Gene expression')
 
-save_plot(paste0(figdir, "figS9.pdf"), fig, base_width = fig.width, base_height = fig.width*0.85)
+save_plot(paste0(figdir, "figS9.tiff"), fig, base_width = fig.width, base_height = fig.width*0.85)
 
 
 ##############################################################################
@@ -1768,7 +1768,7 @@ f5 <- ggplot(plotdata, aes(x=ccl27, y=akt1)) +
 
 # fig <- plot_grid(f1,f2,f3,f4,f5, ncol = 3, labels = c('a','b','c','d','e'))
 fig <- plot_grid(f4,f5, ncol = 2, labels = c('a','b'))
-save_plot(paste0(figdir, "figS10.pdf"), fig, base_width = fig.width, base_height = fig.width/2)
+save_plot(paste0(figdir, "figS10.tiff"), fig, base_width = fig.width, base_height = fig.width/2)
 
 
 ##############################################################################
@@ -2189,7 +2189,7 @@ fig <- ggplot(plotdata, aes(x=PFN1.cn, y=PFN1.gxn)) +
   geom_smooth(method='lm') +
   stat_cor()
 
-save_plot(paste0(figdir, "figR1_CYT.pdf"), fig, base_width = fig.width)
+save_plot(paste0(figdir, "figR1_CYT.tiff"), fig, base_width = fig.width)
 
 
 ###############################################################################################
@@ -2226,7 +2226,7 @@ c <- ggplot(pd, aes(x=Outcome, y=M2/M1)) +
   stat_pvalue_manual(p.m2m1, label='p={p}', xmin = "group1", xmax="group2", tip.length = 0.01, size=3)
 
 fig <- plot_grid(a,b,c, ncol=3)
-save_plot(paste0(figdir, "figR2_macrophages.pdf"), fig)
+save_plot(paste0(figdir, "figR2_macrophages.tiff"), fig)
 
 
 
@@ -2246,7 +2246,7 @@ plotdata <- data.frame(
 fig <- ggplot(plotdata, aes(x=x,y=y)) +
   geom_point(aes(color=outcome, shape = platform)) +
   ggtitle("tSNE plot of all gene expression data")
-save_plot(paste0(figdir, "figR3_tSNE.pdf"), fig, base_width = fig.width)
+save_plot(paste0(figdir, "figR3_tSNE.tiff"), fig, base_width = fig.width)
 
 
 

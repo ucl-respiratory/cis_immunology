@@ -779,6 +779,10 @@ labs <- list(
   "CD45+CD3-CD20-CD11b+CD66b-CD163+CD68+" = "Macrophages",
   "CD45+CD3-CD20-CD11b+CD66b-CD163-CD68+" = "Macrophages"
 )
+# Export these for use in a sup. table:
+df.mihc <- data.frame(V1=names(labs), V2=as.character(labs))
+WriteXLS::WriteXLS(df.mihc, ExcelFileName = "results/mihc.markers.xlsx", AdjWidth = T)
+
 x <- mihc.cis.data[which(rownames(mihc.cis.data) %in% names(labs)),]
 mihc.cis.data2 <- aggregate(x, by=list(unlist(labs[rownames(x)])), FUN=sum)
 rownames(mihc.cis.data2) <- mihc.cis.data2$Group.1
