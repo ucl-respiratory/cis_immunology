@@ -37,6 +37,7 @@ for(lib in libs) {
 vfile <- paste0(supdir, "package.versions.csv")
 version.data <- installed.packages()[libs,]
 write.csv(version.data, file = vfile)
+file.copy(vfile, '.', overwrite = T)
 
 
 # Figure width - assume double column = 183mm (see https://www.nature.com/nature/for-authors/formatting-guide)
